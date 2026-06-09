@@ -1,0 +1,32 @@
+# Maven 빌드 산출물
+target/
+*.class
+
+# 로그
+*.log
+logs/
+
+# IDE - IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# IDE - Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# IDE - VS Code
+.vscode/
+
+# OS 생성 파일
+.DS_Store
+Thumbs.db
+
+# 환경설정/비밀키 (API 키 등이 들어갈 수 있으니 커밋 금지)
+*.env
+.env
+application-local.properties
+secrets.properties

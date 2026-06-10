@@ -115,6 +115,15 @@ CREATE TABLE IF NOT EXISTS news_sector_map (
   KEY idx_sector (sector_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS news_stock_map (
+  id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+  group_id        BIGINT NOT NULL,
+  stock_code      VARCHAR(10) NOT NULL,
+  good_bad_type   VARCHAR(20),
+  KEY idx_group (group_id),
+  KEY idx_stock (stock_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ---------------------------------------------------------------------
 -- 수집 설정 (계획서 6.3: 쿼터 항목 추가)
 -- ---------------------------------------------------------------------
@@ -154,7 +163,7 @@ INSERT INTO collect_settings (setting_key, setting_value, description) VALUES
   ('collect.mode',             'API',   'API / JSOUP'),
   ('collect.jsoup.enabled',    'N',     'Jsoup 보조 수집 사용 여부(약관 검토 전 N)'),
   ('collect.auto.enabled',     'N',     '자동 스케줄러 ON/OFF (기본 수동 버튼)'),
-  ('collect.keywords',         '반도체,2차전지,방산,바이오,조선', '수집 키워드(쉼표)'),
+  ('collect.keywords',         '코스피,코스닥,나스닥,달러 환율,삼성전자,SK하이닉스,LG에너지솔루션,현대차', '수집 키워드(쉼표)'),
   ('collect.max.retry',        '3',     '수집 실패 재시도 횟수'),
   ('collect.timeout.ms',       '5000',  '수집 요청 타임아웃'),
   ('daily.quota.limit',        '25000', '네이버 API 일일 한도'),
@@ -166,7 +175,8 @@ ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
 INSERT INTO sector_master (sector_name, sector_type) VALUES
   ('반도체','업종'),('HBM','테마'),('AI','테마'),('2차전지','테마'),
   ('자동차','업종'),('바이오','업종'),('조선','업종'),('방산','테마'),
-  ('금융','업종'),('원전','테마')
+  ('금융','업종'),('원전','테마'),('코스피','지수'),('코스닥','지수'),
+  ('나스닥','지수'),('환율','거시경제'),('금리','거시경제')
 ON DUPLICATE KEY UPDATE sector_type = VALUES(sector_type);
 
 -- 종목 마스터 (일부 예시)

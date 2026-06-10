@@ -141,11 +141,117 @@ public class AnalyzeService {
                     ps.executeUpdate();
                 }
 
+                // 4. 종목 매핑 저장
+                if (result.related_stocks != null) {
+                    for (StockInfo stock : result.related_stocks) {
+                        String code = getOrCreateStock(conn, stock);
+                        if (code != null) {
+                            insertNewsStockMap(conn, groupId, code, result.good_bad_type);
+                        }
+                    }
+                }
+
+                // 5. 거시 지표/지수/환율 매핑 저장
+                if (result.related_macro != null) {
+                    for (String macro : result.related_macro) {
+                        Long sectorId = getOrCreateMacroSector(conn, macro);
+                        if (sectorId != null) {
+                            insertNewsSectorMap(conn, groupId, sectorId, result.good_bad_type);
+                        }
+                    }
+                }
+
                 conn.commit();
             } catch (Exception e) {
                 conn.rollback();
                 throw e;
             }
+        }
+    }
+
+    private String getOrCreateStock(Connection conn, StockInfo stock) throws SQLException {
+        if (stock.name == null || stock.name.trim().isEmpty()) return null;
+        String selectSql = "SELECT stock_code FROM stock_master WHERE stock_name = ? OR stock_code = ?";
+        try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+            ps.setString(1, stock.name.trim());
+            ps.setString(2, stock.code != null ? stock.code.trim() : "");
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getString(1);
+            }
+        }
+        String code = stock.code != null && stock.code.trim().length() == 6 ? stock.code.trim() : null;
+        if (code == null) {
+            code = "S" + String.format("%05d", Math.abs(stock.name.hashCode()) % 100000);
+        }
+        String insertSql = "INSERT INTO stock_master (stock_code, stock_name, market) VALUES (?, ?, 'KRX')";
+        try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+            ps.setString(1, code);
+            ps.setString(2, stock.name.trim());
+            ps.executeUpdate();
+            return code;
+        } catch (SQLException e) {
+            return code;
+        }
+    }
+
+    private void insertNewsStockMap(Connection conn, Long groupId, String stockCode, String type) throws SQLException {
+        String checkSql = "SELECT id FROM news_stock_map WHERE group_id = ? AND stock_code = ?";
+        try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
+            ps.setLong(1, groupId);
+            ps.setString(2, stockCode);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return;
+            }
+        }
+        String insertSql = "INSERT INTO news_stock_map (group_id, stock_code, good_bad_type) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+            ps.setLong(1, groupId);
+            ps.setString(2, stockCode);
+            ps.setString(3, type);
+            ps.executeUpdate();
+        }
+    }
+
+    private Long getOrCreateMacroSector(Connection conn, String macroName) throws SQLException {
+        if (macroName == null || macroName.trim().isEmpty()) return null;
+        String selectSql = "SELECT id FROM sector_master WHERE sector_name = ?";
+        try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+            ps.setString(1, macroName.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getLong(1);
+            }
+        }
+        String type = "지수";
+        if (macroName.contains("환율") || macroName.contains("달러") || macroName.contains("금리")) {
+            type = "거시경제";
+        }
+        String insertSql = "INSERT INTO sector_master (sector_name, sector_type) VALUES (?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(insertSql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, macroName.trim());
+            ps.setString(2, type);
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) return rs.getLong(1);
+            }
+        }
+        return null;
+    }
+
+    private void insertNewsSectorMap(Connection conn, Long groupId, Long sectorId, String type) throws SQLException {
+        String checkSql = "SELECT id FROM news_sector_map WHERE group_id = ? AND sector_id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
+            ps.setLong(1, groupId);
+            ps.setLong(2, sectorId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return;
+            }
+        }
+        String insertSql = "INSERT INTO news_sector_map (group_id, sector_id, good_bad_type) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
+            ps.setLong(1, groupId);
+            ps.setLong(2, sectorId);
+            ps.setString(3, type);
+            ps.executeUpdate();
         }
     }
 
@@ -172,7 +278,9 @@ public class AnalyzeService {
                 + "  \"impact_reason\": \"Detailed explanation of why this news impacts the stock market/sector in Korean (up to 1000 chars)\",\n"
                 + "  \"risk_factor\": \"Potential risk factors to watch out for in Korean (up to 1000 chars)\",\n"
                 + "  \"confidence_score\": [integer between 0 and 100],\n"
-                + "  \"sector_keywords\": \"comma-separated sector keywords\"\n"
+                + "  \"sector_keywords\": \"comma-separated sector keywords\",\n"
+                + "  \"related_stocks\": [{\"name\": \"Stock Name (e.g. 삼성전자)\", \"code\": \"6-digit stock code if known (e.g. 005930)\"}],\n"
+                + "  \"related_macro\": [\"names of indices/exchange rates mentioned, e.g. 코스피, 코스닥, 나스닥, 환율, 금리\"]\n"
                 + "}";
 
         JsonObject reqBody = new JsonObject();
@@ -240,7 +348,9 @@ public class AnalyzeService {
                 + "  \"impact_reason\": \"Detailed explanation of why this news impacts the stock market/sector in Korean (up to 1000 chars)\",\n"
                 + "  \"risk_factor\": \"Potential risk factors to watch out for in Korean (up to 1000 chars)\",\n"
                 + "  \"confidence_score\": [integer between 0 and 100],\n"
-                + "  \"sector_keywords\": \"comma-separated sector keywords\"\n"
+                + "  \"sector_keywords\": \"comma-separated sector keywords\",\n"
+                + "  \"related_stocks\": [{\"name\": \"Stock Name (e.g. 삼성전자)\", \"code\": \"6-digit stock code if known (e.g. 005930)\"}],\n"
+                + "  \"related_macro\": [\"names of indices/exchange rates mentioned, e.g. 코스피, 코스닥, 나스닥, 환율, 금리\"]\n"
                 + "}";
 
         JsonObject reqBody = new JsonObject();
@@ -348,6 +458,46 @@ public class AnalyzeService {
             res.sector_keywords = "기타";
         }
 
+        // 종목 및 거시 지표 모의 추출
+        res.related_stocks = new ArrayList<>();
+        res.related_macro = new ArrayList<>();
+        if (title.contains("삼성전자")) {
+            StockInfo s = new StockInfo();
+            s.name = "삼성전자";
+            s.code = "005930";
+            res.related_stocks.add(s);
+        }
+        if (title.contains("SK하이닉스") || title.contains("하이닉스")) {
+            StockInfo s = new StockInfo();
+            s.name = "SK하이닉스";
+            s.code = "000660";
+            res.related_stocks.add(s);
+        }
+        if (title.contains("LG에너지솔루션") || title.contains("에코프로")) {
+            StockInfo s = new StockInfo();
+            s.name = "LG에너지솔루션";
+            s.code = "373220";
+            res.related_stocks.add(s);
+        }
+        if (title.contains("현대차") || title.contains("자동차")) {
+            StockInfo s = new StockInfo();
+            s.name = "현대차";
+            s.code = "005380";
+            res.related_stocks.add(s);
+        }
+        if (title.contains("코스피")) {
+            res.related_macro.add("코스피");
+        }
+        if (title.contains("코스닥")) {
+            res.related_macro.add("코스닥");
+        }
+        if (title.contains("나스닥")) {
+            res.related_macro.add("나스닥");
+        }
+        if (title.contains("환율") || title.contains("달러")) {
+            res.related_macro.add("환율");
+        }
+
         return res;
     }
 
@@ -367,5 +517,12 @@ public class AnalyzeService {
         public String risk_factor;
         public int confidence_score;
         public String sector_keywords;
+        public List<StockInfo> related_stocks;
+        public List<String> related_macro;
+    }
+
+    public static class StockInfo {
+        public String name;
+        public String code;
     }
 }

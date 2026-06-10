@@ -37,6 +37,8 @@ public class DashboardServlet extends HttpServlet {
             result.put("goodNews", newsByType(c, "GOOD", true));
             result.put("badNews", newsByType(c, "BAD", false));
             result.put("sectors", sectors(c));
+            result.put("macroSignals", macroSignals(c));
+            result.put("stockSignals", stockSignals(c));
         } catch (Exception e) {
             // 상세 스택트레이스 비노출 (계획서 9장) - 서버 콘솔에는 에러 로그 출력
             e.printStackTrace();
@@ -120,7 +122,7 @@ public class DashboardServlet extends HttpServlet {
                    + "FROM sector_master s "
                    + "JOIN news_sector_map m ON s.id = m.sector_id "
                    + "JOIN news_similarity_group g ON m.group_id = g.id "
-                   + "WHERE g.analyzed_yn = 'Y' "
+                   + "WHERE g.analyzed_yn = 'Y' AND s.sector_type NOT IN ('지수', '거시경제') "
                    + "GROUP BY s.id, s.sector_name, s.sector_type "
                    + "ORDER BY COUNT(g.id) DESC, ABS(AVG(g.impact_score)) DESC";
         
@@ -180,6 +182,69 @@ public class DashboardServlet extends HttpServlet {
                     r.put("dup", rs.getInt("duplicate_count"));
                     list.add(r);
                 }
+            }
+        }
+        return list;
+    }
+
+    private List<Map<String, Object>> macroSignals(Connection c) throws Exception {
+        List<Map<String, Object>> list = new ArrayList<>();
+        String sql = "SELECT s.id, s.sector_name, s.sector_type, "
+                   + "SUM(CASE WHEN g.good_bad_type = 'GOOD' THEN 1 ELSE 0 END) as good_cnt, "
+                   + "SUM(CASE WHEN g.good_bad_type = 'BAD' THEN 1 ELSE 0 END) as bad_cnt, "
+                   + "SUM(CASE WHEN g.good_bad_type IN ('NEUTRAL', 'MIXED') THEN 1 ELSE 0 END) as neu_cnt, "
+                   + "AVG(g.impact_score) as avg_score, "
+                   + "COUNT(g.id) as total_cnt "
+                   + "FROM sector_master s "
+                   + "JOIN news_sector_map m ON s.id = m.sector_id "
+                   + "JOIN news_similarity_group g ON m.group_id = g.id "
+                   + "WHERE g.analyzed_yn = 'Y' AND s.sector_type IN ('지수', '거시경제') "
+                   + "GROUP BY s.id, s.sector_name, s.sector_type "
+                   + "ORDER BY s.sector_type DESC, COUNT(g.id) DESC";
+        
+        try (PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                Map<String, Object> r = new HashMap<>();
+                r.put("name", rs.getString("sector_name"));
+                r.put("type", rs.getString("sector_type"));
+                r.put("good", rs.getInt("good_cnt"));
+                r.put("bad", rs.getInt("bad_cnt"));
+                r.put("neu", rs.getInt("neu_cnt"));
+                r.put("avg", rs.getDouble("avg_score"));
+                r.put("total", rs.getInt("total_cnt"));
+                list.add(r);
+            }
+        }
+        return list;
+    }
+
+    private List<Map<String, Object>> stockSignals(Connection c) throws Exception {
+        List<Map<String, Object>> list = new ArrayList<>();
+        String sql = "SELECT st.stock_code, st.stock_name, st.market, "
+                   + "SUM(CASE WHEN m.good_bad_type = 'GOOD' THEN 1 ELSE 0 END) as good_cnt, "
+                   + "SUM(CASE WHEN m.good_bad_type = 'BAD' THEN 1 ELSE 0 END) as bad_cnt, "
+                   + "SUM(CASE WHEN m.good_bad_type IN ('NEUTRAL', 'MIXED') THEN 1 ELSE 0 END) as neu_cnt, "
+                   + "AVG(g.impact_score) as avg_score, "
+                   + "COUNT(g.id) as total_cnt "
+                   + "FROM stock_master st "
+                   + "JOIN news_stock_map m ON st.stock_code = m.stock_code "
+                   + "JOIN news_similarity_group g ON m.group_id = g.id "
+                   + "WHERE g.analyzed_yn = 'Y' "
+                   + "GROUP BY st.stock_code, st.stock_name, st.market "
+                   + "ORDER BY COUNT(g.id) DESC, ABS(AVG(g.impact_score)) DESC LIMIT 15";
+        
+        try (PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                Map<String, Object> r = new HashMap<>();
+                r.put("code", rs.getString("stock_code"));
+                r.put("name", rs.getString("stock_name"));
+                r.put("market", rs.getString("market"));
+                r.put("good", rs.getInt("good_cnt"));
+                r.put("bad", rs.getInt("bad_cnt"));
+                r.put("neu", rs.getInt("neu_cnt"));
+                r.put("avg", rs.getDouble("avg_score"));
+                r.put("total", rs.getInt("total_cnt"));
+                list.add(r);
             }
         }
         return list;

@@ -46,22 +46,18 @@
       (data.goodNews || []).map(row).join('') || '<div class="empty">호재 없음</div>';
     document.getElementById('badNews').innerHTML =
       (data.badNews || []).map(row).join('') || '<div class="empty">악재 없음</div>';
-    renderSectors(data.sectors || []);
+    renderMacro(data.macroSignals || []);
+    renderStocks(data.stockSignals || []);
   }
 
-  function renderSectors(list) {
-    var el = document.getElementById('sectors');
+  function renderMacro(list) {
+    var el = document.getElementById('macroSignals');
     if (!list || !list.length) {
-      el.innerHTML = '<div class="empty">섹터 분석 정보가 없습니다.</div>';
+      el.innerHTML = '<div class="empty">지수 및 환율 정보가 없습니다.</div>';
       return;
     }
     el.innerHTML = list.map(function (r) {
       var tot = r.total || 1;
-      var stocks = (r.stocks || []).map(function (st) {
-        return '<div class="stock">' + esc(st.name) 
-             + '<span class="code">' + esc(st.code) + '</span>'
-             + '<span class="mk">' + esc(st.market) + '</span></div>';
-      }).join('');
       var avgColor = r.avg > 0 ? 'var(--good)' : r.avg < 0 ? 'var(--bad)' : 'var(--neu)';
       var sign = r.avg > 0 ? '+' : '';
       
@@ -78,10 +74,40 @@
         + '</div>'
         + '<div class="gbcount">'
         + '  <span><span class="d" style="background:var(--good)"></span>호재 ' + r.good + '</span>'
-        + '  <span><span class="d" style="background:var(--neu)"></span>중립·혼합 ' + r.neu + '</span>'
+        + '  <span><span class="d" style="background:var(--neu)"></span>중립 ' + r.neu + '</span>'
         + '  <span><span class="d" style="background:var(--bad)"></span>악재 ' + r.bad + '</span>'
         + '</div>'
-        + '<div class="stocks">' + (stocks || '<span style="color:var(--ink3);font-size:11px">매핑된 종목 없음</span>') + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function renderStocks(list) {
+    var el = document.getElementById('stockSignals');
+    if (!list || !list.length) {
+      el.innerHTML = '<div class="empty">종목별 분석 정보가 없습니다.</div>';
+      return;
+    }
+    el.innerHTML = list.map(function (r) {
+      var tot = r.total || 1;
+      var avgColor = r.avg > 0 ? 'var(--good)' : r.avg < 0 ? 'var(--bad)' : 'var(--neu)';
+      var sign = r.avg > 0 ? '+' : '';
+      
+      return '<div class="srow">'
+        + '<div class="line1">'
+        + '  <span class="sname">' + esc(r.name) + ' <small style="color:var(--ink3);font-weight:400;font-size:11px;">' + esc(r.code) + '</small></span>'
+        + '  <span class="stype">' + esc(r.market) + '</span>'
+        + '  <span class="savg" style="color:' + avgColor + '">평균 ' + sign + esc(r.avg.toFixed(1)) + '</span>'
+        + '</div>'
+        + '<div class="gbbar">'
+        + '  <div class="g" style="width:' + (r.good / tot * 100) + '%"></div>'
+        + '  <div class="n" style="width:' + (r.neu / tot * 100) + '%"></div>'
+        + '  <div class="b" style="width:' + (r.bad / tot * 100) + '%"></div>'
+        + '</div>'
+        + '<div class="gbcount">'
+        + '  <span><span class="d" style="background:var(--good)"></span>호재 ' + r.good + '</span>'
+        + '  <span><span class="d" style="background:var(--neu)"></span>중립 ' + r.neu + '</span>'
+        + '  <span><span class="d" style="background:var(--bad)"></span>악재 ' + r.bad + '</span>'
+        + '</div>'
         + '</div>';
     }).join('');
   }

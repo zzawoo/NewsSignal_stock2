@@ -17,11 +17,17 @@
     </div>
   </section>
 
-  <!-- 오른쪽: 섹터·테마 분석 -->
-  <section class="card">
-    <h2>섹터·테마 분석 <span class="tag">호재/악재 비중 · 관련 종목</span></h2>
-    <div id="sectors" class="sector"></div>
-  </section>
+  <!-- 오른쪽: 지수/환율 & 종목 분석 -->
+  <div class="right-col">
+    <section class="card" style="margin-bottom: 18px;">
+      <h2>지수 & 환율 시그널 <span class="tag">국내외 지수 · 환율</span></h2>
+      <div id="macroSignals" class="sector" style="max-height: 220px;"></div>
+    </section>
+    <section class="card">
+      <h2>종목별 시그널 <span class="tag">상장 종목 분석</span></h2>
+      <div id="stockSignals" class="sector" style="max-height: 220px;"></div>
+    </section>
+  </div>
 </div>
 
   <div class="grid2" style="margin-top:18px;">

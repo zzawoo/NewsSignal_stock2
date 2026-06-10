@@ -17,6 +17,13 @@ $env:DB_PASS = ""
 $env:NAVER_CLIENT_ID = "SCNsodOMzHSqMOGdiHNj"
 $env:NAVER_CLIENT_SECRET = "ZTpWXbnfNq"
 
+# KIS (한국투자증권) OpenAPI
+$env:KIS_APP_KEY = "PScA1yvZGmgXiz7nvKeEvIvye0Rr7NIv2jon"
+$env:KIS_APP_SECRET = "MfWXEjFnJ9ISUtk3B3M/opXxhfgq11Vlq7brhwAqIPYxpGmDo4Lshqrfabfgowh7i3eVfjwjRpJHvMBEFaFMRiFpHKLM8nEI4GXISgRDHxOF30ep0J0+MWeTqlb9cgpmG3VykCHUnoYcQ1PXCiHK8xmE16TzPws5ZeBQKkOau24rRbNZvB8="
+
+# DART OpenAPI (금융감독원)
+$env:DART_API_KEY = "81952a816a0667fdd3e51b69062b52ce32903818"
+
 # ── 빌드 ──────────────────────────────────────────────────────
 Write-Host "▶ Maven 빌드 중..." -ForegroundColor Cyan
 & "C:\project\env\maven\apache-maven-3.9.6\bin\mvn.cmd" clean package -q

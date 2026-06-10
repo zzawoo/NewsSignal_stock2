@@ -17,13 +17,23 @@ public class CollectJob implements Runnable {
         QuotaGuard guard = new QuotaGuard(limit, safe);
 
         List<String> keywords = SettingsService.getKeywords();
-        if (!guard.canCall(keywords.size())) {
+        int totalKeywords = keywords.size();
+        if (totalKeywords == 0) return;
+
+        int lastIndex = SettingsService.getInt("collect.last.index", 0);
+        int maxPerRun = SettingsService.getInt("collect.max.per.run", 100);
+        
+        int startIndex = lastIndex % totalKeywords;
+        int endIndex = Math.min(startIndex + maxPerRun, totalKeywords);
+        List<String> batch = keywords.subList(startIndex, endIndex);
+
+        if (!guard.canCall(batch.size())) {
             System.out.println("[CollectJob] daily quota safe-limit reached, skip. used="
                     + guard.todayCount());
             return;
         }
 
-        // 수집기 구성: API 기본, Jsoup은 설정 ON일 때만 (계획서 4.2)
+        // 수집기 구성: API 기본
         NewsCollector api = new NaverNewsApiCollector(
                 System.getenv("NAVER_CLIENT_ID"),
                 System.getenv("NAVER_CLIENT_SECRET"),
@@ -31,7 +41,7 @@ public class CollectJob implements Runnable {
 
         int totalFetched = 0;
         ArticleService articleService = new ArticleService();
-        for (String kw : keywords) {
+        for (String kw : batch) {
             if (!guard.canCall(1)) break;
             List<NewsArticleDTO> items = api.collect(kw, 30);
             guard.record(1);
@@ -46,6 +56,10 @@ public class CollectJob implements Runnable {
             articleService.saveAll(items, kw);
             totalFetched += items.size();
         }
+        
+        // 다음 시작 인덱스 저장
+        int nextIndex = (endIndex == totalKeywords) ? 0 : endIndex;
+        SettingsService.set("collect.last.index", String.valueOf(nextIndex));
 
         // AI 감성 분석 서비스 연동 (TODO 4단계)
         try {

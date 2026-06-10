@@ -146,10 +146,12 @@ public class DashboardServlet extends HttpServlet {
 
     private List<Map<String, Object>> fetchStocksForSector(Connection c, long sectorId) throws Exception {
         List<Map<String, Object>> stocks = new ArrayList<>();
+        // 종목 수가 많아도 전체 다 반환 (프론트에서 표시 처리)
         String sql = "SELECT st.stock_name, st.stock_code, st.market "
                    + "FROM stock_master st "
                    + "JOIN sector_stock_map sm ON st.stock_code = sm.stock_code "
-                   + "WHERE sm.sector_id = ?";
+                   + "WHERE sm.sector_id = ? "
+                   + "ORDER BY st.stock_name";
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, sectorId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -164,6 +166,7 @@ public class DashboardServlet extends HttpServlet {
         }
         return stocks;
     }
+
 
     private List<Map<String, Object>> rows(Connection c, String sql, String param, boolean unused)
             throws Exception {

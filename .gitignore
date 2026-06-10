@@ -30,3 +30,6 @@ Thumbs.db
 .env
 application-local.properties
 secrets.properties
+start.ps1
+start.bat
+start.sh

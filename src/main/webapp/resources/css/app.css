@@ -6,6 +6,15 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:'Malgun Gothic',system-ui,sans-serif;line-height:1.5}
 .topbar{display:flex;align-items:center;gap:18px;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--panel)}
+/* 모달 안 기사 푸터 */
+.mfoot { font-size:12px; color:#888; display:flex; gap:10px; align-items:center; }
+.mfoot .press { color:#666; font-weight:600; }
+.mfoot .pubdate { margin-left:auto; }
+
+/* 주식 테이블 및 탭 스타일 */
+.stock-table th { border-bottom: 2px solid #ccc; font-weight:bold; }
+.stock-row:hover { background-color: #f5f9ff; transition: background 0.2s; }
+.tab-btn:hover { color: #0056b3; }
 .brand{font-weight:600;display:flex;align-items:center;gap:10px}
 .brand small{color:var(--ink3);font-weight:400;border-left:1px solid var(--line2);padding-left:10px;font-size:12px}
 .pulse{width:10px;height:10px;border-radius:50%;background:var(--good)}
@@ -20,18 +29,47 @@ nav a:hover{color:var(--accent)}
 .wrap{max-width:1500px;margin:0 auto;padding:22px 24px 60px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:18px}
 .issues-card{overflow:hidden;border-radius:14px}
-.card>h2{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.card>h2{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--panel2);margin:0;}
 .card>h2 .tag{margin-left:auto;font-size:11px;color:var(--ink3);font-weight:400}
+.card-header-flex{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.card-header-flex h2{font-size:13px;font-weight:600;margin:0;border-bottom:none;padding:0}
+.controls{display:flex;gap:8px}
+.form-select{background:var(--bg);color:var(--ink);border:1px solid var(--line2);border-radius:6px;padding:4px 8px;font-size:12px;outline:none}
+.form-select:focus{border-color:var(--accent)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 @media(max-width:880px){.grid2{grid-template-columns:1fr}}
 /* 상단 2단: 주요이슈(왼쪽 66.6%) + 섹터분석(오른쪽 33.3%) */
-.top-layout{display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:18px;align-items:start}
-.top-layout > .card{margin-bottom:0}
-.issues-card{min-width:0}
-.issues-wrapper{max-height:480px;overflow-y:auto}
+.top-layout{display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:18px;height:460px}
+.top-layout > .card{margin-bottom:0;display:flex;flex-direction:column;height:100%;overflow:hidden}
+.issues-wrapper, .sector{flex:1;overflow-y:auto;min-height:0;padding-bottom:12px}
 .issues-wrapper::-webkit-scrollbar{width:6px}
 .issues-wrapper::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
 @media(max-width:1100px){.top-layout{grid-template-columns:1fr}}
+
+/* ===== Macro Signals (Horizontal Grid) ===== */
+.macro-grid {
+  display: flex;
+  gap: 12px;
+  padding: 14px 18px;
+  overflow-x: auto;
+  background: var(--panel);
+}
+.macro-grid::-webkit-scrollbar { height: 6px; }
+.macro-grid::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 3px; }
+.macro-grid .m-item {
+  flex: 1;
+  min-width: 130px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 12px;
+  text-align: center;
+  transition: 0.15s;
+}
+.macro-grid .m-item:hover { background: var(--panel2); }
+.macro-grid .m-item .m-name { font-size: 13px; color: var(--ink3); margin-bottom: 6px; font-weight: 500; }
+.macro-grid .m-item .m-val { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.macro-grid .m-item .m-meta { font-size: 11px; color: var(--ink2); }
 .issues{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);min-width:0;width:100%;box-sizing:border-box}
 .item{background:var(--panel);padding:14px 16px;border-bottom:1px solid var(--line);min-width:0}
 .news .item:last-child{border-bottom:0}
@@ -48,8 +86,8 @@ nav a:hover{color:var(--accent)}
 .disclaimer{padding:18px 24px;border-top:1px solid var(--line);font-size:11px;color:var(--ink3);text-align:center;line-height:1.6}
 
 /* ===== Sector and Stock master tables ===== */
-.sector{padding:6px 0;max-height:480px;overflow-y:auto}
-.srow{padding:12px 18px;border-bottom:1px solid var(--line);transition:.15s}
+.sector{padding:6px 0}
+.srow{padding:12px 18px;border-bottom:1px solid var(--line);transition:.15s;cursor:pointer}
 .srow:last-child{border-bottom:0}
 .srow:hover{background:var(--panel2)}
 .srow .line1{display:flex;align-items:center;gap:11px;margin-bottom:9px}
@@ -61,10 +99,21 @@ nav a:hover{color:var(--accent)}
 .gbcount{display:flex;gap:14px;font-size:11px;margin-bottom:9px}
 .gbcount span{display:flex;align-items:center;gap:5px;color:var(--ink2)}
 .gbcount .d{width:8px;height:8px;border-radius:2px}
-.stocks{display:flex;flex-wrap:wrap;gap:6px}
-.stock{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;background:var(--bg2);border:1px solid var(--line);border-radius:7px;padding:4px 10px}
-.stock .code{color:var(--ink3);font-size:10.5px}
-.stock .mk{font-size:9px;padding:1px 4px;border-radius:3px;background:var(--accent-dim);color:var(--accent)}
+.stocks-list-wrapper{padding:0}
+
+/* stock-row: table context (테이블 <tr>로 렌더링될 때) */
+table .stock-row{display:table-row;background:transparent;border-bottom:none;transition:.15s}
+table .stock-row:hover td{background:var(--panel2)}
+table .stock-row td{border-bottom:1px solid var(--line); color:var(--ink);}
+table .stock-row td:first-child{color:var(--ink)}
+
+/* stock-row: 기존 div 방식 fallback */
+.stock-row{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);transition:.15s}
+.stock-row:last-child{border-bottom:none}
+.stock-row:hover{background:var(--panel2)}
+.stock-row .info{display:flex;align-items:center;gap:12px;flex:1}
+.stock-row .code{color:var(--ink3);font-size:12px;font-family:monospace}
+.stock-row .name{font-weight:600;font-size:14px;color:var(--ink)}
 
 /* ===== Interactive Modal Styles ===== */
 .modal-overlay {

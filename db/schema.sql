@@ -171,6 +171,10 @@ INSERT INTO collect_settings (setting_key, setting_value, description) VALUES
   ('analyze.daily.limit',      '2000',  'LLM 일일 분석 상한(비용 통제)')
 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
 
+INSERT INTO collect_settings (setting_key, setting_value) VALUES 
+('collect.keywords', '코스피,코스닥,KRX,KONEX,다우,나스닥,환율,유가,금,은')
+ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
+
 -- 섹터 마스터
 INSERT INTO sector_master (sector_name, sector_type) VALUES
   ('반도체','업종'),('HBM','테마'),('AI','테마'),('2차전지','테마'),

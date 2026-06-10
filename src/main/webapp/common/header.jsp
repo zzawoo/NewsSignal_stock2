@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="<c:out value='${sessionScope.csrfToken}'/>">
   <title>NewsSignal AI</title>
-  <link rel="stylesheet" href="<%=request.getContextPath()%>/resources/css/app.css">
+  <link rel="stylesheet" href="<%=request.getContextPath()%>/resources/css/app.css?v=<%=System.currentTimeMillis()%>">
 </head>
 <body data-ctx="<%=request.getContextPath()%>">
 <header class="topbar">

@@ -265,7 +265,7 @@ public class AnalyzeService {
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(15000);
 
-        String prompt = "Analyze the following stock market news and output a JSON response. "
+        String prompt = "Analyze the following stock market news based on KRX/KOSPI/KOSDAQ/KONEX listed stocks and domestic/international individual stock prices, indices, and exchange rates. Output a JSON response.\n"
                 + "News Title: " + title + "\n"
                 + "News Description: " + desc + "\n"
                 + "You must return ONLY a raw JSON object matching this schema. Do not include markdown formatting or backticks.\n"
@@ -278,9 +278,10 @@ public class AnalyzeService {
                 + "  \"impact_reason\": \"Detailed explanation of why this news impacts the stock market/sector in Korean (up to 1000 chars)\",\n"
                 + "  \"risk_factor\": \"Potential risk factors to watch out for in Korean (up to 1000 chars)\",\n"
                 + "  \"confidence_score\": [integer between 0 and 100],\n"
-                + "  \"sector_keywords\": \"comma-separated sector keywords\",\n"
+                + "  \"confidence_score\": [integer between 0 and 100],\n"
+                + "  \"sector_keywords\": \"comma-separated sector keywords. You MUST ONLY use the following allowed sectors: 반도체, 바이오, 2차전지, 자동차, 조선, 방산, 금융, 원전. DO NOT USE individual stock names or any other words as sectors.\",\n"
                 + "  \"related_stocks\": [{\"name\": \"Stock Name (e.g. 삼성전자)\", \"code\": \"6-digit stock code if known (e.g. 005930)\"}],\n"
-                + "  \"related_macro\": [\"names of indices/exchange rates mentioned, e.g. 코스피, 코스닥, 나스닥, 환율, 금리\"]\n"
+                + "  \"related_macro\": [\"names of indices/exchange rates mentioned, e.g. 코스피, 코스닥, 환율, 유가, 금, 은\"]\n"
                 + "}";
 
         JsonObject reqBody = new JsonObject();
@@ -336,7 +337,7 @@ public class AnalyzeService {
         conn.setConnectTimeout(10000);
         conn.setReadTimeout(15000);
 
-        String prompt = "Analyze the following stock market news and output a JSON response.\n"
+        String prompt = "Analyze the following stock market news based on KRX/KOSPI/KOSDAQ/KONEX listed stocks and domestic/international individual stock prices, indices, and exchange rates. Output a JSON response.\n"
                 + "News Title: " + title + "\n"
                 + "News Description: " + desc + "\n"
                 + "You must return a JSON object matching this schema:\n"
@@ -348,9 +349,10 @@ public class AnalyzeService {
                 + "  \"impact_reason\": \"Detailed explanation of why this news impacts the stock market/sector in Korean (up to 1000 chars)\",\n"
                 + "  \"risk_factor\": \"Potential risk factors to watch out for in Korean (up to 1000 chars)\",\n"
                 + "  \"confidence_score\": [integer between 0 and 100],\n"
-                + "  \"sector_keywords\": \"comma-separated sector keywords\",\n"
+                + "  \"confidence_score\": [integer between 0 and 100],\n"
+                + "  \"sector_keywords\": \"comma-separated sector keywords. You MUST ONLY use the following allowed sectors: 반도체, 바이오, 2차전지, 자동차, 조선, 방산, 금융, 원전. DO NOT USE individual stock names or any other words as sectors.\",\n"
                 + "  \"related_stocks\": [{\"name\": \"Stock Name (e.g. 삼성전자)\", \"code\": \"6-digit stock code if known (e.g. 005930)\"}],\n"
-                + "  \"related_macro\": [\"names of indices/exchange rates mentioned, e.g. 코스피, 코스닥, 나스닥, 환율, 금리\"]\n"
+                + "  \"related_macro\": [\"names of indices/exchange rates mentioned, e.g. 코스피, 코스닥, 환율, 유가, 금, 은\"]\n"
                 + "}";
 
         JsonObject reqBody = new JsonObject();

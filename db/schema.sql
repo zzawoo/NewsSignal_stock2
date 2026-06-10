@@ -178,3 +178,20 @@ INSERT INTO stock_master (stock_code, stock_name, market) VALUES
   ('068270','셀트리온','KOSPI'),('329180','HD현대중공업','KOSPI'),
   ('034020','두산에너빌리티','KOSPI'),('035420','네이버','KOSPI')
 ON DUPLICATE KEY UPDATE stock_name = VALUES(stock_name);
+
+-- 섹터-종목 매핑 초기 데이터
+INSERT INTO sector_stock_map (sector_id, stock_code) VALUES
+  ((SELECT id FROM sector_master WHERE sector_name='반도체'), '005930'),
+  ((SELECT id FROM sector_master WHERE sector_name='반도체'), '000660'),
+  ((SELECT id FROM sector_master WHERE sector_name='HBM'), '000660'),
+  ((SELECT id FROM sector_master WHERE sector_name='HBM'), '042700'),
+  ((SELECT id FROM sector_master WHERE sector_name='AI'), '035420'),
+  ((SELECT id FROM sector_master WHERE sector_name='2차전지'), '373220'),
+  ((SELECT id FROM sector_master WHERE sector_name='2차전지'), '247540'),
+  ((SELECT id FROM sector_master WHERE sector_name='방산'), '012450'),
+  ((SELECT id FROM sector_master WHERE sector_name='방산'), '079550'),
+  ((SELECT id FROM sector_master WHERE sector_name='바이오'), '207940'),
+  ((SELECT id FROM sector_master WHERE sector_name='바이오'), '068270'),
+  ((SELECT id FROM sector_master WHERE sector_name='조선'), '329180'),
+  ((SELECT id FROM sector_master WHERE sector_name='원전'), '034020')
+ON DUPLICATE KEY UPDATE sector_id = VALUES(sector_id);

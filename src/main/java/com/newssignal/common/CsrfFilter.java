@@ -41,12 +41,23 @@ public class CsrfFilter implements Filter {
     /** 상태변경 요청에서 서블릿이 호출하는 검증 메서드 */
     public static boolean validate(HttpServletRequest req) {
         HttpSession session = req.getSession(false);
-        if (session == null) return false;
+        if (session == null) {
+            System.out.println("[CSRF] validation failed: Session is null");
+            return false;
+        }
         Object expected = session.getAttribute(TOKEN_ATTR);
-        if (expected == null) return false;
+        if (expected == null) {
+            System.out.println("[CSRF] validation failed: expected token in session is null");
+            return false;
+        }
         String got = req.getHeader(HEADER);
         if (got == null) got = req.getParameter("_csrf");
-        return expected.equals(got);
+        
+        boolean match = expected.equals(got);
+        if (!match) {
+            System.out.println("[CSRF] validation failed. Expected: " + expected + ", Got: " + got + ", SessionID: " + session.getId());
+        }
+        return match;
     }
 
     @Override public void init(FilterConfig f) {}

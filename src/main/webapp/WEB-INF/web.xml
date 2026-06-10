@@ -33,5 +33,32 @@
     <location>/common/error.jsp</location>
   </error-page>
 
-  <!-- Filters/Servlets/Listener는 어노테이션(@WebFilter/@WebServlet/@WebListener)으로 등록됨 -->
+  <!-- Configure default servlet to read static files as UTF-8 -->
+  <servlet>
+    <servlet-name>default</servlet-name>
+    <init-param>
+      <param-name>fileEncoding</param-name>
+      <param-value>UTF-8</param-value>
+    </init-param>
+  </servlet>
+
+  <!-- Static resources encoding mapping -->
+  <mime-mapping>
+    <extension>js</extension>
+    <mime-type>application/javascript;charset=UTF-8</mime-type>
+  </mime-mapping>
+  <mime-mapping>
+    <extension>css</extension>
+    <mime-type>text/css;charset=UTF-8</mime-type>
+  </mime-mapping>
+
+  <!-- Global JSP configuration for UTF-8 encoding -->
+  <jsp-config>
+    <jsp-property-group>
+      <url-pattern>*.jsp</url-pattern>
+      <page-encoding>UTF-8</page-encoding>
+    </jsp-property-group>
+  </jsp-config>
+
+  <!-- Filters/Servlets/Listener는 어노테이션 (@WebFilter/@WebServlet/@WebListener)으로 등록됨 -->
 </web-app>

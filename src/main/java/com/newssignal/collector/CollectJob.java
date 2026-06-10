@@ -1,5 +1,6 @@
 package com.newssignal.collector;
 
+import com.newssignal.analyzer.AnalyzeService;
 import java.util.List;
 
 /**
@@ -29,15 +30,31 @@ public class CollectJob implements Runnable {
                 SettingsService.getInt("collect.timeout.ms", 5000));
 
         int totalFetched = 0;
+        ArticleService articleService = new ArticleService();
         for (String kw : keywords) {
             if (!guard.canCall(1)) break;
             List<NewsArticleDTO> items = api.collect(kw, 30);
             guard.record(1);
+            
+            for (NewsArticleDTO item : items) {
+                if (item.sectorKeywords == null) {
+                    item.sectorKeywords = new java.util.ArrayList<>();
+                }
+                item.sectorKeywords.add(kw);
+            }
+            
+            articleService.saveAll(items, kw);
             totalFetched += items.size();
-            // TODO(2차): 중복제거 → 유사도 그룹화 → 대표 LLM 분석 → 섹터/종목 매핑 → 저장
-            //   ArticleService.saveDedup(items);
-            //   SimilarityService.regroup();  AnalyzeService.analyzeNewReps();
         }
+
+        // AI 감성 분석 서비스 연동 (TODO 4단계)
+        try {
+            AnalyzeService analyzeService = new AnalyzeService();
+            analyzeService.analyzeUnanalyzedGroups();
+        } catch (Exception e) {
+            System.err.println("[CollectJob] Sentiment analysis failed: " + e.getMessage());
+        }
+
         System.out.println("[CollectJob] fetched=" + totalFetched
                 + " keywords=" + keywords.size() + " quotaUsed=" + guard.todayCount());
     }

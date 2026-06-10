@@ -27,7 +27,12 @@ public class SecurityHeaderFilter implements Filter {
                 "default-src 'self'; img-src 'self' data:; "
               + "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
               + "font-src https://fonts.gstatic.com; script-src 'self'");
-
+        
+        // Disable browser caching to prevent stale CSRF tokens and stale JS files
+        http.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        http.setHeader("Pragma", "no-cache");
+        http.setDateHeader("Expires", 0);
+ 
         chain.doFilter(req, resp);
     }
 

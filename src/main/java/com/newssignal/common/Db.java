@@ -16,10 +16,11 @@ public final class Db {
 
     static {
         HikariConfig cfg = new HikariConfig();
+        cfg.setDriverClassName("org.mariadb.jdbc.Driver");
         cfg.setJdbcUrl(env("DB_URL",
                 "jdbc:mariadb://localhost:3306/newssignal?useUnicode=true&characterEncoding=utf8"));
-        cfg.setUsername(env("DB_USER", "newssignal"));
-        cfg.setPassword(env("DB_PASS", "change_me"));
+        cfg.setUsername(env("DB_USER", "root"));
+        cfg.setPassword(env("DB_PASS", ""));
         cfg.setMaximumPoolSize(10);
         cfg.setMinimumIdle(2);
         cfg.setConnectionTimeout(5000);
@@ -39,6 +40,6 @@ public final class Db {
 
     private static String env(String key, String def) {
         String v = System.getenv(key);
-        return (v == null || v.isEmpty()) ? def : v;
+        return (v == null) ? def : v;
     }
 }

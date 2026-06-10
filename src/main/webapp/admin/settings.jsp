@@ -1,3 +1,4 @@
+<%@ page pageEncoding="UTF-8" %>
 <%@ include file="/common/header.jsp" %>
 <%-- 관리자: 수집 설정 (2차 구현 골격). collect_settings 값을 편집 --%>
 <main class="wrap">

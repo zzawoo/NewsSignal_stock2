@@ -1,3 +1,4 @@
+<%@ page pageEncoding="UTF-8" %>
 <%@ include file="/common/header.jsp" %>
 <%-- 사용자 대시보드 (계획서 8장). 데이터는 /api/dashboard 에서 비동기 로드 --%>
 
@@ -7,12 +8,26 @@
 </div>
 
 <main class="wrap">
-  <section class="card">
-    <h2>주요 이슈 그룹 <span class="tag">중복 보도 많은 순</span></h2>
-    <div id="issues" class="issues"><div class="empty">데이터를 불러오는 중…</div></div>
+<div class="top-layout">
+  <!-- 왼쪽: 주요 이슈 그룹 (3열 x 2행) -->
+  <section class="card issues-card">
+    <h2>주요 이슈 그룹 <span class="tag">호재·악재·중립 각 2건 · 영향가 강한 순</span></h2>
+    <div id="issues" class="issues"></div>
+    <!-- 나머지 이슈 (전체보기 클릭 시 표시) -->
+    <div id="moreIssues" class="issues" style="display:none; border-top: 1px solid var(--line);"></div>
+    <div id="moreIssuesFooter" style="display:none; padding:12px 16px; text-align:center; border-top:1px solid var(--line);">
+      <button id="moreIssuesBtn" class="btn" style="font-size:13px; padding:8px 24px;">▼ 전체보기</button>
+    </div>
   </section>
 
-  <div class="grid2">
+  <!-- 오른쪽: 섹터·테마 분석 -->
+  <section class="card">
+    <h2>섹터·테마 분석 <span class="tag">호재/악재 비중 · 관련 종목</span></h2>
+    <div id="sectors" class="sector"></div>
+  </section>
+</div>
+
+  <div class="grid2" style="margin-top:18px;">
     <section class="card">
       <h2>호재 뉴스</h2>
       <div id="goodNews" class="news"></div>
@@ -22,7 +37,21 @@
       <div id="badNews" class="news"></div>
     </section>
   </div>
+
 </main>
 
-<script src="<%=request.getContextPath()%>/resources/js/dashboard.js"></script>
+<!-- 뉴스 리스트 모달 (이슈 그룹 클릭 시 표시) -->
+<div id="articlesModal" class="modal-overlay" style="display: none;">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="modalTitle">이슈 상세 뉴스</h3>
+      <button id="modalCloseBtn" class="modal-close">&times;</button>
+    </div>
+    <div id="modalBody" class="modal-body">
+      <div class="loading-spinner">뉴스 불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<script charset="UTF-8" src="<%=request.getContextPath()%>/resources/js/dashboard.js?v=<%=System.currentTimeMillis()%>"></script>
 <%@ include file="/common/footer.jsp" %>

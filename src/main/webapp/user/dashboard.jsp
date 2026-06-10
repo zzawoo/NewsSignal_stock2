@@ -12,11 +12,8 @@
   <!-- 왼쪽: 주요 이슈 그룹 (3열 x 2행) -->
   <section class="card issues-card">
     <h2>주요 이슈 그룹 <span class="tag">호재·악재·중립 각 2건 · 영향가 강한 순</span></h2>
-    <div id="issues" class="issues"></div>
-    <!-- 나머지 이슈 (전체보기 클릭 시 표시) -->
-    <div id="moreIssues" class="issues" style="display:none; border-top: 1px solid var(--line);"></div>
-    <div id="moreIssuesFooter" style="display:none; padding:12px 16px; text-align:center; border-top:1px solid var(--line);">
-      <button id="moreIssuesBtn" class="btn" style="font-size:13px; padding:8px 24px;">▼ 전체보기</button>
+    <div class="issues-wrapper">
+      <div id="issues" class="issues"></div>
     </div>
   </section>
 

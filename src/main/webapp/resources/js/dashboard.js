@@ -37,21 +37,10 @@
   }
 
   function render(data) {
-    var issues = (data.topIssues || []).map(row).join('')
+    var allList = (data.topIssues || []).concat(data.moreIssues || []);
+    var issues = allList.map(row).join('')
       || '<div class="empty">수집된 이슈가 없습니다. 위 버튼을 눌러 시작하세요.</div>';
     document.getElementById('issues').innerHTML = issues;
-
-    // 나머지 이슈 (moreIssues)
-    var moreList = data.moreIssues || [];
-    var moreEl = document.getElementById('moreIssues');
-    var moreFooter = document.getElementById('moreIssuesFooter');
-    if (moreList.length > 0) {
-      moreEl.innerHTML = moreList.map(row).join('');
-      moreFooter.style.display = 'block';
-    } else {
-      moreEl.innerHTML = '';
-      moreFooter.style.display = 'none';
-    }
 
     document.getElementById('goodNews').innerHTML =
       (data.goodNews || []).map(row).join('') || '<div class="empty">호재 없음</div>';
@@ -167,27 +156,7 @@
     });
   }
 
-  // 전체보기 버튼 토글
-  function initMoreIssues() {
-    var btn = document.getElementById('moreIssuesBtn');
-    var moreEl = document.getElementById('moreIssues');
-    if (!btn || !moreEl) return;
-    var expanded = false;
-    btn.addEventListener('click', function () {
-      expanded = !expanded;
-      if (expanded) {
-        moreEl.style.display = 'grid';
-        btn.textContent = '▲ 접기';
-      } else {
-        moreEl.style.display = 'none';
-        btn.textContent = '▼ 전체보기';
-        // 접을 때 상단으로 부드럽게 스크롤
-        document.querySelector('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    });
-  }
-
-  ['issues', 'goodNews', 'badNews', 'moreIssues'].forEach(function (id) {
+  ['issues', 'goodNews', 'badNews'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) {
       el.addEventListener('click', function (e) {
@@ -216,6 +185,5 @@
     });
   });
 
-  initMoreIssues();
   load();
 })();

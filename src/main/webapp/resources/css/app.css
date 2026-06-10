@@ -19,19 +19,21 @@ nav a:hover{color:var(--accent)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .wrap{max-width:1500px;margin:0 auto;padding:22px 24px 60px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:18px}
-.issues-card{overflow:visible !important;border-radius:14px}
+.issues-card{overflow:hidden;border-radius:14px}
 .card>h2{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--panel2)}
 .card>h2 .tag{margin-left:auto;font-size:11px;color:var(--ink3);font-weight:400}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 @media(max-width:880px){.grid2{grid-template-columns:1fr}}
-/* 상단 2단: 주요이슈(왼쪽 60%) + 섹터분석(오른쪽 40%) */
-.top-layout{display:grid;grid-template-columns:3fr 2fr;gap:18px;margin-bottom:18px;align-items:start}
+/* 상단 2단: 주요이슈(왼쪽 66.6%) + 섹터분석(오른쪽 33.3%) */
+.top-layout{display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:18px;align-items:start}
 .top-layout > .card{margin-bottom:0}
 .issues-card{min-width:0}
-.issues-card > .issues{min-width:0}
+.issues-wrapper{max-height:480px;overflow-y:auto}
+.issues-wrapper::-webkit-scrollbar{width:6px}
+.issues-wrapper::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
 @media(max-width:1100px){.top-layout{grid-template-columns:1fr}}
-.issues{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);min-width:0;width:100%;box-sizing:border-box}
-.item{background:var(--panel);padding:14px 16px;border-bottom:1px solid var(--line)}
+.issues{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);min-width:0;width:100%;box-sizing:border-box}
+.item{background:var(--panel);padding:14px 16px;border-bottom:1px solid var(--line);min-width:0}
 .news .item:last-child{border-bottom:0}
 .sig{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;margin-bottom:8px}
 .sig.good{color:var(--good);background:#0e2f24}.sig.bad{color:var(--bad);background:#331620}
@@ -46,7 +48,7 @@ nav a:hover{color:var(--accent)}
 .disclaimer{padding:18px 24px;border-top:1px solid var(--line);font-size:11px;color:var(--ink3);text-align:center;line-height:1.6}
 
 /* ===== Sector and Stock master tables ===== */
-.sector{padding:6px 0;max-height:600px;overflow-y:auto}
+.sector{padding:6px 0;max-height:480px;overflow-y:auto}
 .srow{padding:12px 18px;border-bottom:1px solid var(--line);transition:.15s}
 .srow:last-child{border-bottom:0}
 .srow:hover{background:var(--panel2)}

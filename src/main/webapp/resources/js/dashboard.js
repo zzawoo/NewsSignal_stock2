@@ -15,25 +15,33 @@
   var LABEL = { GOOD: '호재', BAD: '악재', NEUTRAL: '중립', MIXED: '혼합' };
   var allIssuesData  = [];
   var allSectorsData = [];
+  var lastMacroSignals = [];
   var currentSectorStocks = [];
   var CHUNK_SIZE = 15; // 한 번에 KIS API를 호출할 종목 수
 
   /* ───────────── 데이터 로드 ───────────── */
   function load() {
-    fetch(ctx + '/api/dashboard')
-      .then(function (r) { return r.json(); })
-      .then(render)
-      .catch(function () {
-        document.getElementById('issues').innerHTML =
-          '<div class="empty">데이터를 불러오지 못했습니다. 잠시 후 다시 시도하세요.</div>';
-      });
+    Promise.all([
+      fetch(ctx + '/api/dashboard').then(function (r) { return r.json(); }),
+      fetch(ctx + '/api/macro/prices').then(function (r) { return r.json(); }).catch(function() { return {}; })
+    ])
+    .then(function (results) {
+      var dashData = results[0];
+      var macroData = results[1] && results[1].prices ? results[1].prices : {};
+      render(dashData, macroData);
+    })
+    .catch(function () {
+      document.getElementById('issues').innerHTML =
+        '<div class="empty">데이터를 불러오지 못했습니다. 다시 새로고침 시도하세요.</div>';
+    });
   }
 
-  function render(data) {
+  function render(data, macroData) {
     allIssuesData  = (data.topIssues || []).concat(data.moreIssues || []);
     allSectorsData = data.sectors || [];
+    lastMacroSignals = data.macroSignals || [];
     renderFilteredIssues();
-    renderMacro(data.macroSignals || []);
+    renderMacro(lastMacroSignals, macroData || {});
     renderSectors(allSectorsData);
   }
 
@@ -52,30 +60,32 @@
   }
 
   /* ───────────── 거시경제 ───────────── */
-  function renderMacro(list) {
+  function renderMacro(list, macroData) {
     var el = document.getElementById('macroSignals');
     var required = ['코스피', '코스닥', '환율', '유가', '금', '은'];
+    var macroKeys = {'코스피':'KOSPI', '코스닥':'KOSDAQ', '환율':'환율', '유가':'유가', '금':'금', '은':'은'};
     var map = {};
     (list || []).forEach(function (r) { map[r.name] = r; });
     var html = '';
     required.forEach(function (req) {
       var r = map[req];
-      if (r) {
-        var avgColor = r.avg > 0 ? 'var(--good)' : r.avg < 0 ? 'var(--bad)' : 'var(--neu)';
-        var sign = r.avg > 0 ? '+' : '';
-        var val = r.avg !== 0 ? sign + r.avg.toFixed(1) : '0';
-        html += '<div class="m-item">'
-              + '  <div class="m-name">' + esc(r.name) + '</div>'
-              + '  <div class="m-val" style="color:' + avgColor + '">시그널: ' + esc(val) + '</div>'
-              + '  <div class="m-meta">관련뉴스 ' + r.total + '건</div>'
-              + '</div>';
-      } else {
-        html += '<div class="m-item">'
-              + '  <div class="m-name">' + esc(req) + '</div>'
-              + '  <div class="m-val" style="color:var(--neu)">-</div>'
-              + '  <div class="m-meta">데이터 없음</div>'
-              + '</div>';
-      }
+      var mKey = macroKeys[req];
+      var mData = (macroData && macroData[mKey]) || {};
+      
+      var priceStr = mData.price && mData.price !== '-' ? mData.price : '-';
+      var signCode = mData.sign || '3';
+      var priceColor = 'var(--neu)';
+      var arrow = '';
+      // 종목처럼 상승은 빨간색(var(--bad)가 index.css에선 붉은색), 하락은 파란/초록색(var(--good))
+      if (signCode === '2' || signCode === '1') { priceColor = 'var(--bad)'; arrow = '▲'; }
+      else if (signCode === '5' || signCode === '4') { priceColor = 'var(--good)'; arrow = '▼'; }
+      
+      var diffStr = mData.ratio && mData.ratio !== '0.00' ? (arrow + ' ' + mData.diff + ' (' + mData.ratio + '%)') : '';
+
+      html += '<div class="m-item">';
+      html += '  <div class="m-name">' + esc(req) + '</div>';
+      html += '  <div class="m-price" style="font-size:18px; font-weight:700; margin:4px 0; color:' + priceColor + '">' + esc(priceStr) + ' <span style="font-size:12px; font-weight:normal;">' + esc(diffStr) + '</span></div>';
+      html += '</div>';
     });
     el.innerHTML = html;
   }
@@ -559,6 +569,33 @@
   var sortEl   = document.getElementById('issueSort');
   if (filterEl) filterEl.addEventListener('change', renderFilteredIssues);
   if (sortEl)   sortEl.addEventListener('change',   renderFilteredIssues);
+
+  /* ───────────── 실시간 업데이트 (15초 주기) ───────────── */
+  function refreshRealtimeData() {
+    // 거시경제 지표 갱신
+    fetch(ctx + '/api/macro/prices')
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        var macroData = res.prices || {};
+        renderMacro(lastMacroSignals, macroData);
+      })
+      .catch(function(){});
+
+    // 표시된 종목 가격 갱신 (이미 한 번 로드된 종목 대상)
+    var container = document.getElementById('stockListContainer');
+    if (container) {
+      var rows = container.querySelectorAll('.stock-row[data-loaded="true"]');
+      rows.forEach(function(row) {
+        if (fetchQueue.indexOf(row) === -1) {
+          fetchQueue.push(row);
+        }
+      });
+      processFetchQueue();
+    }
+  }
+
+  // 15초마다 실시간 갱신 실행
+  setInterval(refreshRealtimeData, 15000);
 
   load();
 })();

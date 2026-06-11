@@ -82,6 +82,29 @@ public class NaverNewsApiCollector implements NewsCollector {
                 NewsArticleDTO n = new NewsArticleDTO();
                 n.title       = stripTags(getStr(it, "title"));
                 n.description = stripTags(getStr(it, "description"));
+                
+                // 생성형 AI가 작성한 뉴스 제외 필터링 (제목 및 요약문 기반 강력 필터)
+                String lowerTitle = n.title.toLowerCase();
+                String lowerDesc = n.description.toLowerCase();
+                boolean isAiGenerated = false;
+                
+                String[] aiKeywords = {
+                    "ai가 작성", "생성형 ai가 작성", "로봇 기자", "로봇기자", "ai 요약", 
+                    "인공지능이 작성", "생성형 ai가 함께", "ai 기자", "인공지능 기자", 
+                    "데이터랩", "metavx"
+                };
+
+                for (String kw : aiKeywords) {
+                    if (lowerTitle.contains(kw) || lowerDesc.contains(kw)) {
+                        isAiGenerated = true;
+                        break;
+                    }
+                }
+
+                if (isAiGenerated) {
+                    continue; // AI가 작성한 기사는 수집에서 제외
+                }
+                
                 n.originalLink= getStr(it, "originallink");
                 n.naverLink   = getStr(it, "link");
                 n.pubDate     = LocalDateTime.now(); // pubDate 파싱은 운영 시 RFC1123 처리

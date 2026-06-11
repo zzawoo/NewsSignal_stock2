@@ -134,11 +134,33 @@ public class AnalyzeService {
                     ps.executeUpdate();
                 }
 
-                // 3. 섹터 매핑 테이블 업데이트
+                // 3. 섹터 매핑 테이블 업데이트 (이건 기존에 매핑된 것의 타입만 업데이트)
                 try (PreparedStatement ps = conn.prepareStatement(updateSectorMapSql)) {
                     ps.setString(1, result.good_bad_type);
                     ps.setLong(2, groupId);
                     ps.executeUpdate();
+                }
+
+                // 3-1. AI가 찾은 섹터 추출 및 저장
+                if (result.sector_keywords != null && !result.sector_keywords.trim().isEmpty()) {
+                    String[] aiSectors = result.sector_keywords.split(",");
+                    List<String> validSectors = new ArrayList<>();
+                    for (String s : aiSectors) {
+                        String sName = s.trim();
+                        Long sectorId = getOrCreateSector(conn, sName);
+                        if (sectorId != null) {
+                            insertNewsSectorMap(conn, groupId, sectorId, result.good_bad_type);
+                            validSectors.add(sName);
+                        }
+                    }
+                    if (!validSectors.isEmpty()) {
+                        String mergedSectors = String.join(",", validSectors);
+                        try (PreparedStatement ps = conn.prepareStatement("UPDATE news_similarity_group SET related_sectors = ? WHERE id = ?")) {
+                            ps.setString(1, mergedSectors);
+                            ps.setLong(2, groupId);
+                            ps.executeUpdate();
+                        }
+                    }
                 }
 
                 // 4. 종목 매핑 저장
@@ -222,13 +244,35 @@ public class AnalyzeService {
             }
         }
         String type = "지수";
-        if (macroName.contains("환율") || macroName.contains("달러") || macroName.contains("금리")) {
+        if (macroName.contains("환율") || macroName.contains("달러") || macroName.contains("금리") || macroName.contains("유가") || macroName.contains("금") || macroName.contains("은")) {
             type = "거시경제";
         }
         String insertSql = "INSERT INTO sector_master (sector_name, sector_type) VALUES (?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(insertSql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, macroName.trim());
             ps.setString(2, type);
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) return rs.getLong(1);
+            }
+        }
+        return null;
+    }
+
+    private Long getOrCreateSector(Connection conn, String sectorName) throws SQLException {
+        if (sectorName == null || !com.newssignal.collector.ArticleService.isAllowedSector(sectorName.trim())) {
+            return null;
+        }
+        String selectSql = "SELECT id FROM sector_master WHERE sector_name = ?";
+        try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+            ps.setString(1, sectorName.trim());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getLong(1);
+            }
+        }
+        String insertSql = "INSERT INTO sector_master (sector_name, sector_type) VALUES (?, '테마')";
+        try (PreparedStatement ps = conn.prepareStatement(insertSql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, sectorName.trim());
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) return rs.getLong(1);
@@ -498,6 +542,15 @@ public class AnalyzeService {
         }
         if (title.contains("환율") || title.contains("달러")) {
             res.related_macro.add("환율");
+        }
+        if (title.contains("유가") || Math.random() < 0.1) {
+            res.related_macro.add("유가");
+        }
+        if (title.contains("금") || Math.random() < 0.1) {
+            res.related_macro.add("금");
+        }
+        if (title.contains("은") || Math.random() < 0.05) {
+            res.related_macro.add("은");
         }
 
         return res;

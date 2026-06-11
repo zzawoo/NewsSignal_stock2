@@ -50,7 +50,9 @@ public class CollectJob implements Runnable {
                 if (item.sectorKeywords == null) {
                     item.sectorKeywords = new java.util.ArrayList<>();
                 }
-                item.sectorKeywords.add(kw);
+                if (ArticleService.isAllowedSector(kw)) {
+                    item.sectorKeywords.add(kw);
+                }
             }
             
             articleService.saveAll(items, kw);

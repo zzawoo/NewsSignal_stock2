@@ -24,6 +24,10 @@ $env:KIS_APP_SECRET = "MfWXEjFnJ9ISUtk3B3M/opXxhfgq11Vlq7brhwAqIPYxpGmDo4Lshqrfa
 # DART OpenAPI (금융감독원)
 $env:DART_API_KEY = "81952a816a0667fdd3e51b69062b52ce32903818"
 
+# AI API 설정 (429 에러 방지용 로컬 목업 강제 설정)
+$env:OPENAI_API_KEY = "dummy_key"
+$env:GEMINI_API_KEY = "dummy_key"
+
 # ── 빌드 ──────────────────────────────────────────────────────
 Write-Host "▶ Maven 빌드 중..." -ForegroundColor Cyan
 & "C:\project\env\maven\apache-maven-3.9.6\bin\mvn.cmd" clean package -q

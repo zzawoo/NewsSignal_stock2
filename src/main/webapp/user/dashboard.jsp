@@ -8,9 +8,9 @@
 </div>
 
 <main class="wrap">
-  <!-- 상단: 지수 & 환율 시그널 -->
+  <!-- 상단: 오늘의 증시 지표 -->
   <section class="card" style="margin-bottom: 18px;">
-    <h2>지수 & 환율 시그널 <span class="tag">국내외 지수 · 환율 · 유가 · 금 · 은</span></h2>
+    <h2>오늘의 증시 지표 <span class="tag">국내외 지수 · 환율 · 유가 · 금 · 은</span></h2>
     <div id="macroSignals" class="macro-grid"></div>
   </section>
 

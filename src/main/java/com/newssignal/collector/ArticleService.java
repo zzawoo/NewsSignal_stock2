@@ -46,14 +46,10 @@ public class ArticleService {
                     Long existingId = checkDuplicateHash(conn, hash);
                     if (existingId != null) {
                         dupCnt++;
-                        // 기존 기사의 그룹에 현재 기사도 연결 (모달에서 표시 가능하도록)
+                        // 완전 중복 시 DB에 새로 기사를 추가하지 않고 그룹 카운트만 증가
                         Long groupId = getGroupIdByArticle(conn, existingId);
                         if (groupId != null) {
-                            // 새 기사도 저장하되 duplicate_yn='Y'로 그룹에 연결
-                            Long newArticleId = insertArticleWithGroup(conn, article, groupId);
-                            if (newArticleId != null) {
-                                incrementGroupDuplicateCount(conn, groupId);
-                            }
+                            incrementGroupDuplicateCount(conn, groupId);
                         } else {
                             incrementGroupDuplicateCountByArticle(conn, existingId);
                         }
@@ -325,17 +321,40 @@ public class ArticleService {
         }
     }
 
+    private static final List<String> ALLOWED_SECTORS = Arrays.asList(
+        "반도체", "바이오", "2차전지", "자동차", "조선", "방산", "금융", "원전",
+        "코스피", "코스닥", "나스닥", "환율", "금리", "지수", "거시경제",
+        "유가", "금", "은", "달러"
+    );
+
+    public static boolean isAllowedSector(String s) {
+        return s != null && ALLOWED_SECTORS.contains(s.trim());
+    }
+
     private Long getOrCreateSectorId(Connection conn, String sectorName) throws SQLException {
+        if (sectorName == null || !ALLOWED_SECTORS.contains(sectorName.trim())) {
+            return null;
+        }
+        
         String selectSql = "SELECT id FROM sector_master WHERE sector_name = ?";
         try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
-            ps.setString(1, sectorName);
+            ps.setString(1, sectorName.trim());
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) return rs.getLong(1);
             }
         }
-        String insertSql = "INSERT INTO sector_master (sector_name, sector_type) VALUES (?, '테마')";
+        
+        String type = "테마";
+        if (sectorName.contains("코스피") || sectorName.contains("코스닥") || sectorName.contains("나스닥")) {
+            type = "지수";
+        } else if (sectorName.contains("환율") || sectorName.contains("금리")) {
+            type = "거시경제";
+        }
+        
+        String insertSql = "INSERT INTO sector_master (sector_name, sector_type) VALUES (?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, sectorName);
+            ps.setString(1, sectorName.trim());
+            ps.setString(2, type);
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) return rs.getLong(1);

@@ -66,15 +66,15 @@ public class DashboardServlet extends HttpServlet {
     private List<Map<String, Object>> topIssues(Connection c) throws Exception {
         String sql =
             "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type = 'GOOD' "
+          + " FROM news_similarity_group WHERE good_bad_type = 'GOOD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
           + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
           + "UNION ALL "
           + "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type = 'BAD' "
+          + " FROM news_similarity_group WHERE good_bad_type = 'BAD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
           + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
           + "UNION ALL "
           + "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') "
+          + " FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
           + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
           + "ORDER BY ABS(impact_score) DESC";
         return rows(c, sql, null, false);
@@ -88,15 +88,15 @@ public class DashboardServlet extends HttpServlet {
         String sql =
             "SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
           + "FROM news_similarity_group "
-          + "WHERE id NOT IN ("
+          + "WHERE last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND id NOT IN ("
           +   "SELECT id FROM ("
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'GOOD' "
+          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'GOOD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
           +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
           +     "UNION ALL "
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'BAD' "
+          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'BAD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
           +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
           +     "UNION ALL "
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') "
+          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
           +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2)"
           +   ") AS top6"
           + ") "

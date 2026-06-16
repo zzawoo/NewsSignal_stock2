@@ -58,7 +58,7 @@ public class GroupArticlesServlet extends HttpServlet {
           + "FROM news_articles na "
           + "JOIN news_similarity_group g ON g.representative_news_id = na.id "
           + "WHERE g.id = ? "
-          + "ORDER BY duplicate_yn ASC, pub_date DESC";
+          + "ORDER BY pub_date DESC";
 
         try (Connection conn = Db.conn(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, groupId);

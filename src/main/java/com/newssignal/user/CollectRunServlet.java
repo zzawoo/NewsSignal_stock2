@@ -1,6 +1,6 @@
 package com.newssignal.user;
 
-import com.newssignal.collector.CollectJob;
+import com.newssignal.collector.AnalyzeJob;
 import com.newssignal.common.CsrfFilter;
 
 import javax.servlet.annotation.WebServlet;
@@ -26,12 +26,15 @@ public class CollectRunServlet extends HttpServlet {
             resp.sendError(HttpServletResponse.SC_FORBIDDEN, "CSRF token mismatch");
             return;
         }
-        // 비동기 실행 (간단한 데모용 스레드; 운영은 ExecutorService 권장)
-        new Thread(new CollectJob(), "manual-collect").start();
+        // "분석·요약 실행" 버튼: 수집은 자동(10분 스케줄)으로 적재되고,
+        //  이 버튼은 **이미 적재된 미분석 뉴스**를 분석/요약만 수행한다(수집 안 함).
+        //  - 응답 지연 방지를 위해 백그라운드 스레드로 위임하고 클라이언트는 상태를 폴링한다.
+        //  - AnalyzeJob의 isRunning 가드로 중복 실행은 스킵된다.
+        new Thread(new AnalyzeJob(), "manual-analyze").start();
 
         resp.setContentType("application/json; charset=UTF-8");
         try (PrintWriter out = resp.getWriter()) {
-            out.print("{\"status\":\"started\",\"mode\":\"manual\"}");
+            out.print("{\"status\":\"started\",\"mode\":\"analyze\"}");
         }
     }
 }

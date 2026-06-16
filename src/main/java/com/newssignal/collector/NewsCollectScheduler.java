@@ -22,11 +22,15 @@ public class NewsCollectScheduler {
     private volatile boolean running = false;
 
     public NewsCollectScheduler(Runnable job) {
+        this(job, "news-collect");
+    }
+
+    public NewsCollectScheduler(Runnable job, final String namePrefix) {
         this.job = job;
         ThreadFactory daemonFactory = new ThreadFactory() {
             private final AtomicInteger seq = new AtomicInteger(1);
             @Override public Thread newThread(Runnable r) {
-                Thread t = new Thread(r, "news-collect-" + seq.getAndIncrement());
+                Thread t = new Thread(r, namePrefix + "-" + seq.getAndIncrement());
                 t.setDaemon(true);           // ★ Tomcat 종료 차단 방지
                 return t;
             }

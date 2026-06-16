@@ -11,6 +11,8 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -86,28 +88,72 @@ public class NaverNewsApiCollector implements NewsCollector {
                 // 생성형 AI가 작성한 뉴스 제외 필터링 (제목 및 요약문 기반 강력 필터)
                 String lowerTitle = n.title.toLowerCase();
                 String lowerDesc = n.description.toLowerCase();
-                boolean isAiGenerated = false;
+                boolean isFiltered = false;
                 
                 String[] aiKeywords = {
                     "ai가 작성", "생성형 ai가 작성", "로봇 기자", "로봇기자", "ai 요약", 
                     "인공지능이 작성", "생성형 ai가 함께", "ai 기자", "인공지능 기자", 
                     "데이터랩", "metavx"
                 };
+                
+                String[] excludeKeywords = {
+                    "종교", "스포츠", "연예인", "연예",
+                    "축구", "야구", "농구", "올림픽", "월드컵", 
+                    "배우", "아이돌", "가수", "기독교", "불교", "천주교",
+                    "서울데이터랩", "서울 데이터랩", "데이터랩"
+                };
 
                 for (String kw : aiKeywords) {
                     if (lowerTitle.contains(kw) || lowerDesc.contains(kw)) {
-                        isAiGenerated = true;
+                        isFiltered = true;
                         break;
                     }
                 }
+                
+                if (!isFiltered) {
+                    for (String kw : excludeKeywords) {
+                        if (lowerTitle.contains(kw) || lowerDesc.contains(kw)) {
+                            isFiltered = true;
+                            break;
+                        }
+                    }
+                }
 
-                if (isAiGenerated) {
-                    continue; // AI가 작성한 기사는 수집에서 제외
+                if (isFiltered) {
+                    continue; // AI 작성 또는 제외 키워드가 포함된 기사는 수집에서 제외
+                }
+                
+                LocalDateTime parsedDate = LocalDateTime.now();
+                try {
+                    String pd = getStr(it, "pubDate");
+                    if (!pd.isEmpty()) {
+                        parsedDate = ZonedDateTime.parse(pd, DateTimeFormatter.RFC_1123_DATE_TIME).toLocalDateTime();
+                    }
+                } catch (Exception e) {
+                    // parsing failed, use now
+                }
+                
+                if (parsedDate.isBefore(LocalDateTime.now().minusDays(3))) {
+                    continue; // 3일 이전 기사 제외
                 }
                 
                 n.originalLink= getStr(it, "originallink");
+                
+                String press = null;
+                if (n.originalLink != null && n.originalLink.startsWith("http")) {
+                    try {
+                        java.net.URL parsedUrl = new java.net.URL(n.originalLink);
+                        press = parsedUrl.getHost();
+                        if (press != null && press.startsWith("www.")) {
+                            press = press.substring(4);
+                        }
+                    } catch (Exception e) {
+                        // ignore
+                    }
+                }
+                n.press       = press;
                 n.naverLink   = getStr(it, "link");
-                n.pubDate     = LocalDateTime.now(); // pubDate 파싱은 운영 시 RFC1123 처리
+                n.pubDate     = parsedDate;
                 n.sourceType  = "NAVER_API";
                 out.add(n);
             }

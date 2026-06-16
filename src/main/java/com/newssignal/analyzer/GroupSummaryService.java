@@ -71,47 +71,30 @@ public class GroupSummaryService {
      * - 총 160자를 넘지 않도록 잘라냄
      */
     private String buildSummary(List<String> descriptions) {
-        // 1. 모든 description에서 문장 분리
-        LinkedHashSet<String> seen = new LinkedHashSet<>();
-        List<String> sentences = new ArrayList<>();
-
+        if (descriptions.isEmpty()) return "";
+        
+        // 가장 긴 설명글을 찾아서 반환 (마지막에 불필요한 ...나 특수기호 정리)
+        String bestDesc = descriptions.get(0);
         for (String desc : descriptions) {
-            // 마침표·줄바꿈 기준으로 분리
-            String[] parts = desc.split("[.。\\n]+");
-            for (String p : parts) {
-                String s = p.trim();
-                if (s.length() < 15) continue; // 너무 짧은 단편 제외
-                // 유사 중복 제거 (첫 20자 기준)
-                String key = s.length() > 20 ? s.substring(0, 20) : s;
-                if (seen.add(key)) {
-                    sentences.add(s);
-                }
-                if (sentences.size() >= 4) break;
+            if (desc.length() > bestDesc.length()) {
+                bestDesc = desc;
             }
-            if (sentences.size() >= 4) break;
         }
-
-        if (sentences.isEmpty()) {
-            // 문장 분리 실패 시 첫 description의 앞부분만 사용
-            String fallback = descriptions.get(0);
-            return fallback.length() > 160 ? fallback.substring(0, 157) + "…" : fallback;
+        
+        // HTML 태그 제거 (혹시 남아있다면)
+        bestDesc = bestDesc.replaceAll("<[^>]*>", "");
+        
+        // HTML 엔티티 디코딩 (간단히 자주 쓰이는 것만)
+        bestDesc = bestDesc.replace("&quot;", "\"")
+                           .replace("&apos;", "'")
+                           .replace("&lt;", "<")
+                           .replace("&gt;", ">")
+                           .replace("&amp;", "&");
+                           
+        bestDesc = bestDesc.trim();
+        if (bestDesc.length() > 150) {
+            bestDesc = bestDesc.substring(0, 147) + "...";
         }
-
-        // 2. 상위 3문장을 선택해 이어붙임
-        StringBuilder sb = new StringBuilder();
-        int count = 0;
-        for (String s : sentences) {
-            if (count >= 3) break;
-            if (sb.length() > 0) sb.append(" ");
-            // 한 문장이 너무 길면 잘라냄
-            if (s.length() > 80) s = s.substring(0, 77) + "…";
-            sb.append(s).append(".");
-            count++;
-        }
-
-        String result = sb.toString().trim();
-        // 최종 160자 상한
-        if (result.length() > 160) result = result.substring(0, 157) + "…";
-        return result;
+        return bestDesc;
     }
 }

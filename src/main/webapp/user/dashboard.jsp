@@ -3,7 +3,7 @@
 <%-- 사용자 대시보드 (계획서 8장). 데이터는 /api/dashboard 에서 비동기 로드 --%>
 
 <div class="deck">
-  <button id="collectBtn" class="btn primary">수집·분석 실행</button>
+  <button id="collectBtn" class="btn primary">분석·요약 실행</button>
   <span class="hint">실 운영에서는 네이버 검색 API를 서버(Servlet)에서 호출합니다.</span>
 </div>
 

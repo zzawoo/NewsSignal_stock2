@@ -1,7 +1,7 @@
 package com.newssignal.collector;
 
-import com.newssignal.analyzer.AnalyzeService;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 수집 1회 실행 단위 (수동 버튼·자동 스케줄러 공용).
@@ -10,8 +10,16 @@ import java.util.List;
  */
 public class CollectJob implements Runnable {
 
+    public static final AtomicBoolean isRunning = new AtomicBoolean(false);
+
     @Override
     public void run() {
+        if (!isRunning.compareAndSet(false, true)) {
+            System.out.println("[CollectJob] Job is already running. Skipping this run.");
+            return;
+        }
+
+        try {
         int limit  = SettingsService.getInt("daily.quota.limit", 25000);
         double safe = SettingsService.getDouble("daily.quota.safe.ratio", 0.8);
         QuotaGuard guard = new QuotaGuard(limit, safe);
@@ -52,6 +60,13 @@ public class CollectJob implements Runnable {
                 }
                 if (ArticleService.isAllowedSector(kw)) {
                     item.sectorKeywords.add(kw);
+                } else {
+                    List<String> extracted = ArticleService.extractSectorsFromText(item.title + " " + item.description + " " + kw);
+                    for (String ex : extracted) {
+                        if (!item.sectorKeywords.contains(ex)) {
+                            item.sectorKeywords.add(ex);
+                        }
+                    }
                 }
             }
             
@@ -63,15 +78,15 @@ public class CollectJob implements Runnable {
         int nextIndex = (endIndex == totalKeywords) ? 0 : endIndex;
         SettingsService.set("collect.last.index", String.valueOf(nextIndex));
 
-        // AI 감성 분석 서비스 연동 (TODO 4단계)
-        try {
-            AnalyzeService analyzeService = new AnalyzeService();
-            analyzeService.analyzeUnanalyzedGroups();
-        } catch (Exception e) {
-            System.err.println("[CollectJob] Sentiment analysis failed: " + e.getMessage());
-        }
+        // ※ AI 분석은 더 이상 수집과 동기로 호출하지 않는다.
+        //    수집은 DB 적재까지만 책임지고, 분석/요약은 독립 스케줄러(AnalyzeJob)가
+        //    DB에 쌓인 미분석 그룹(analyzed_yn='N')을 RPD 예산 내에서 따로 소화한다.
+        //    (수집이 LLM 속도/쿼터에 막히지 않도록 producer/consumer 분리)
 
         System.out.println("[CollectJob] fetched=" + totalFetched
                 + " keywords=" + keywords.size() + " quotaUsed=" + guard.todayCount());
+        } finally {
+            isRunning.set(false);
+        }
     }
 }

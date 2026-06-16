@@ -66,17 +66,17 @@ public class DashboardServlet extends HttpServlet {
     private List<Map<String, Object>> topIssues(Connection c) throws Exception {
         String sql =
             "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type = 'GOOD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
-          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
+          + " FROM news_similarity_group WHERE good_bad_type = 'GOOD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
+          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
           + "UNION ALL "
           + "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type = 'BAD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
-          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
+          + " FROM news_similarity_group WHERE good_bad_type = 'BAD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
+          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
           + "UNION ALL "
           + "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
-          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
-          + "ORDER BY ABS(impact_score) DESC";
+          + " FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
+          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
+          + "ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC";
         return rows(c, sql, null, false);
     }
 
@@ -88,19 +88,19 @@ public class DashboardServlet extends HttpServlet {
         String sql =
             "SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
           + "FROM news_similarity_group "
-          + "WHERE last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) AND id NOT IN ("
+          + "WHERE last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) AND id NOT IN ("
           +   "SELECT id FROM ("
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'GOOD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
-          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
+          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'GOOD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
+          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
           +     "UNION ALL "
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'BAD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
-          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2) "
+          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'BAD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
+          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
           +     "UNION ALL "
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) "
-          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC LIMIT 2)"
+          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
+          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2)"
           +   ") AS top6"
           + ") "
-          + "ORDER BY ABS(impact_score) DESC, duplicate_count DESC";
+          + "ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 20";
         return rows(c, sql, null, false);
     }
 
@@ -114,17 +114,19 @@ public class DashboardServlet extends HttpServlet {
     private List<Map<String, Object>> sectors(Connection c) throws Exception {
         List<Map<String, Object>> list = new ArrayList<>();
         String sql = "SELECT s.id, s.sector_name, s.sector_type, "
-                   + "SUM(CASE WHEN g.good_bad_type = 'GOOD' THEN 1 ELSE 0 END) as good_cnt, "
-                   + "SUM(CASE WHEN g.good_bad_type = 'BAD' THEN 1 ELSE 0 END) as bad_cnt, "
-                   + "SUM(CASE WHEN g.good_bad_type IN ('NEUTRAL', 'MIXED') THEN 1 ELSE 0 END) as neu_cnt, "
+                   + "SUM(CASE WHEN g.good_bad_type = 'GOOD' THEN g.duplicate_count ELSE 0 END) as good_cnt, "
+                   + "SUM(CASE WHEN g.good_bad_type = 'BAD' THEN g.duplicate_count ELSE 0 END) as bad_cnt, "
+                   + "SUM(CASE WHEN g.good_bad_type IN ('NEUTRAL', 'MIXED') THEN g.duplicate_count ELSE 0 END) as neu_cnt, "
                    + "AVG(g.impact_score) as avg_score, "
-                   + "COUNT(g.id) as total_cnt "
+                   + "SUM(g.duplicate_count) as total_cnt "
                    + "FROM sector_master s "
                    + "JOIN news_sector_map m ON s.id = m.sector_id "
                    + "JOIN news_similarity_group g ON m.group_id = g.id "
                    + "WHERE g.analyzed_yn = 'Y' AND s.sector_type NOT IN ('지수', '거시경제') "
+                   + "AND s.sector_name NOT IN ('지수') "  // 화이트리스트 밖 레거시 쓰레기 섹터 방어
+                   + "AND g.last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
                    + "GROUP BY s.id, s.sector_name, s.sector_type "
-                   + "ORDER BY COUNT(g.id) DESC, ABS(AVG(g.impact_score)) DESC";
+                   + "ORDER BY SUM(g.duplicate_count) DESC, ABS(AVG(g.impact_score)) DESC";
         
         try (PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
@@ -178,7 +180,8 @@ public class DashboardServlet extends HttpServlet {
                     Map<String, Object> r = new HashMap<>();
                     r.put("id", rs.getLong("id"));
                     r.put("title", rs.getString("group_title"));
-                    r.put("summary", rs.getString("group_summary")); // 추가: 2~3줄 요약
+                    r.put("summary", rs.getString("group_summary")); // 2~3줄 요약 (UI에서 item-summary로 노출)
+                    
                     r.put("type", rs.getString("good_bad_type"));
                     r.put("score", rs.getInt("impact_score"));
                     r.put("sectors", rs.getString("related_sectors"));
@@ -193,17 +196,17 @@ public class DashboardServlet extends HttpServlet {
     private List<Map<String, Object>> macroSignals(Connection c) throws Exception {
         List<Map<String, Object>> list = new ArrayList<>();
         String sql = "SELECT s.id, s.sector_name, s.sector_type, "
-                   + "SUM(CASE WHEN g.good_bad_type = 'GOOD' THEN 1 ELSE 0 END) as good_cnt, "
-                   + "SUM(CASE WHEN g.good_bad_type = 'BAD' THEN 1 ELSE 0 END) as bad_cnt, "
-                   + "SUM(CASE WHEN g.good_bad_type IN ('NEUTRAL', 'MIXED') THEN 1 ELSE 0 END) as neu_cnt, "
+                   + "SUM(CASE WHEN g.good_bad_type = 'GOOD' THEN g.duplicate_count ELSE 0 END) as good_cnt, "
+                   + "SUM(CASE WHEN g.good_bad_type = 'BAD' THEN g.duplicate_count ELSE 0 END) as bad_cnt, "
+                   + "SUM(CASE WHEN g.good_bad_type IN ('NEUTRAL', 'MIXED') THEN g.duplicate_count ELSE 0 END) as neu_cnt, "
                    + "AVG(g.impact_score) as avg_score, "
-                   + "COUNT(g.id) as total_cnt "
+                   + "SUM(g.duplicate_count) as total_cnt "
                    + "FROM sector_master s "
                    + "JOIN news_sector_map m ON s.id = m.sector_id "
                    + "JOIN news_similarity_group g ON m.group_id = g.id "
-                   + "WHERE g.analyzed_yn = 'Y' AND s.sector_type IN ('지수', '거시경제') "
+                   + "WHERE g.analyzed_yn = 'Y' AND s.sector_type IN ('지수', '거시경제') AND g.last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
                    + "GROUP BY s.id, s.sector_name, s.sector_type "
-                   + "ORDER BY s.sector_type DESC, COUNT(g.id) DESC";
+                   + "ORDER BY s.sector_type DESC, SUM(g.duplicate_count) DESC";
         
         try (PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
@@ -224,17 +227,17 @@ public class DashboardServlet extends HttpServlet {
     private List<Map<String, Object>> stockSignals(Connection c) throws Exception {
         List<Map<String, Object>> list = new ArrayList<>();
         String sql = "SELECT st.stock_code, st.stock_name, st.market, "
-                   + "SUM(CASE WHEN m.good_bad_type = 'GOOD' THEN 1 ELSE 0 END) as good_cnt, "
-                   + "SUM(CASE WHEN m.good_bad_type = 'BAD' THEN 1 ELSE 0 END) as bad_cnt, "
-                   + "SUM(CASE WHEN m.good_bad_type IN ('NEUTRAL', 'MIXED') THEN 1 ELSE 0 END) as neu_cnt, "
+                   + "SUM(CASE WHEN m.good_bad_type = 'GOOD' THEN g.duplicate_count ELSE 0 END) as good_cnt, "
+                   + "SUM(CASE WHEN m.good_bad_type = 'BAD' THEN g.duplicate_count ELSE 0 END) as bad_cnt, "
+                   + "SUM(CASE WHEN m.good_bad_type IN ('NEUTRAL', 'MIXED') THEN g.duplicate_count ELSE 0 END) as neu_cnt, "
                    + "AVG(g.impact_score) as avg_score, "
-                   + "COUNT(g.id) as total_cnt "
+                   + "SUM(g.duplicate_count) as total_cnt "
                    + "FROM stock_master st "
                    + "JOIN news_stock_map m ON st.stock_code = m.stock_code "
                    + "JOIN news_similarity_group g ON m.group_id = g.id "
-                   + "WHERE g.analyzed_yn = 'Y' "
+                   + "WHERE g.analyzed_yn = 'Y' AND g.last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
                    + "GROUP BY st.stock_code, st.stock_name, st.market "
-                   + "ORDER BY COUNT(g.id) DESC, ABS(AVG(g.impact_score)) DESC LIMIT 15";
+                   + "ORDER BY SUM(g.duplicate_count) DESC, ABS(AVG(g.impact_score)) DESC LIMIT 15";
         
         try (PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {

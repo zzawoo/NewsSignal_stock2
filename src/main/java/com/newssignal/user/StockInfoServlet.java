@@ -136,11 +136,9 @@ public class StockInfoServlet extends HttpServlet {
                         fakeKis.addProperty("prdy_ctrt", "0.00");
                     }
                     
-                    // 빈 값으로 거래량, 거래대금, 시가총액 채움
-                    fakeKis.addProperty("acml_vol", "0");
-                    fakeKis.addProperty("acml_tr_pbmn", "0");
-                    fakeKis.addProperty("hts_avls", "0");
-                    
+                    // 거래량/거래대금/시가총액은 네이버 basic에 없음 →
+                    // "0"으로 덮지 말고 생략한다(프론트가 직전 값 유지, 0 깜빡임 방지).
+
                     return fakeKis;
                 }
             }

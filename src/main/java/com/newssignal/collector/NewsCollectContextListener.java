@@ -15,40 +15,65 @@ import javax.servlet.annotation.WebListener;
 @WebListener
 public class NewsCollectContextListener implements ServletContextListener {
 
-    private NewsCollectScheduler scheduler;
+    private NewsCollectScheduler scheduler;       // 수집 스케줄 (선택)
+    private NewsCollectScheduler analyzeScheduler; // 분석 스케줄 (수집과 분리)
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
+        // 1) 수집 스케줄러: 자동 수집이 켜져 있을 때만 가동 (기본은 수동 버튼 → OFF)
         try {
-            // 자동 수집이 켜져 있을 때만 가동 (기본은 수동 버튼 → OFF)
             boolean auto = "Y".equalsIgnoreCase(SettingsService.get("collect.auto.enabled", "N"));
             if (auto) {
                 int keywords = SettingsService.getKeywords().size();
                 int limit  = SettingsService.getInt("daily.quota.limit", 25000);
                 double safe = SettingsService.getDouble("daily.quota.safe.ratio", 0.8);
                 QuotaGuard guard = new QuotaGuard(limit, safe);
-                int interval = guard.dynamicIntervalSec(keywords);
+                // CollectJob은 1회 실행당 collect.max.per.run(기본 100) 키워드만 rotate 처리하므로,
+                // 키워드 전체 기준의 dynamicIntervalSec는 과도하게 길다. collect.interval.sec로 오버라이드.
+                int interval = SettingsService.getInt("collect.interval.sec", guard.dynamicIntervalSec(keywords));
 
-                scheduler = new NewsCollectScheduler(new CollectJob());
+                scheduler = new NewsCollectScheduler(new CollectJob(), "news-collect");
                 scheduler.start(interval);
-                sce.getServletContext().log("[NewsSignal] scheduler started, interval=" + interval + "s");
+                sce.getServletContext().log("[NewsSignal] collect scheduler started, interval=" + interval + "s");
             } else {
                 sce.getServletContext().log("[NewsSignal] auto-collect OFF (manual button mode)");
             }
         } catch (Exception e) {
-            sce.getServletContext().log("[NewsSignal] init failed: " + e.getMessage());
+            sce.getServletContext().log("[NewsSignal] collect init failed: " + e.getMessage());
+        }
+
+        // 2) 분석 스케줄러: 수집과 분리되어 항상 가동(기본 ON). DB에 적재된 미분석
+        //    그룹을 독립 주기로 소화하므로, 수집이 수동 버튼이어도 적재분은 자동 분석된다.
+        try {
+            boolean analyzeAuto = "Y".equalsIgnoreCase(SettingsService.get("analyze.auto.enabled", "Y"));
+            if (analyzeAuto) {
+                int analyzeInterval = SettingsService.getInt("analyze.interval.sec", 60);
+                analyzeScheduler = new NewsCollectScheduler(new AnalyzeJob(), "news-analyze");
+                analyzeScheduler.start(analyzeInterval);
+                sce.getServletContext().log("[NewsSignal] analyze scheduler started, interval=" + analyzeInterval + "s");
+            } else {
+                sce.getServletContext().log("[NewsSignal] auto-analyze OFF");
+            }
+        } catch (Exception e) {
+            sce.getServletContext().log("[NewsSignal] analyze init failed: " + e.getMessage());
         }
     }
 
     @Override
     public void contextDestroyed(ServletContextEvent sce) {
-        // 단계 1: 스케줄러 종료
+        // 단계 1: 수집 스케줄러 종료
         try {
             if (scheduler != null) scheduler.shutdown();
         } catch (Exception e) {
             sce.getServletContext().log("[NewsSignal] scheduler shutdown error: " + e.getMessage());
         }
-        // 단계 2: DB 풀 종료 (스케줄러 실패와 무관하게 별도 try)
+        // 단계 2: 분석 스케줄러 종료
+        try {
+            if (analyzeScheduler != null) analyzeScheduler.shutdown();
+        } catch (Exception e) {
+            sce.getServletContext().log("[NewsSignal] analyze scheduler shutdown error: " + e.getMessage());
+        }
+        // 단계 3: DB 풀 종료 (스케줄러 실패와 무관하게 별도 try)
         try {
             Db.shutdown();
         } catch (Exception e) {

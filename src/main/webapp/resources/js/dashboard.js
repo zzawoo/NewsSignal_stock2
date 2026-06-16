@@ -37,7 +37,15 @@
   }
 
   function render(data, macroData) {
-    allIssuesData  = (data.topIssues || []).concat(data.moreIssues || []);
+    var rawIssues = (data.topIssues || []).concat(data.moreIssues || []);
+    allIssuesData = [];
+    var seen = {};
+    for (var i = 0; i < rawIssues.length; i++) {
+      if (!seen[rawIssues[i].id]) {
+        seen[rawIssues[i].id] = true;
+        allIssuesData.push(rawIssues[i]);
+      }
+    }
     allSectorsData = data.sectors || [];
     lastMacroSignals = data.macroSignals || [];
     renderFilteredIssues();
@@ -50,11 +58,10 @@
     var sectors = (it.sectors || '').split(',').filter(Boolean)
       .map(function (s) { return '<span class="chip">' + esc(s.trim()) + '</span>'; }).join('');
     var sign = it.score > 0 ? '+' : '';
-    var summaryText = it.summary || it.title;
-    return '<div class="item" data-group-id="' + it.id + '" style="cursor:pointer;">'
+    var summaryText = it.summary || '요약 정보가 없습니다.';
+    return '<div class="item" data-group-id="' + it.id + '" data-group-title="' + esc(it.title) + '" style="cursor:pointer;" title="클릭하여 관련 기사 목록 보기">'
       + '<span class="sig ' + esc((it.type || '').toLowerCase()) + '">' + (LABEL[it.type] || '-') + '</span>'
-      + '<h3 class="item-title">' + esc(it.title) + '</h3>'
-      + '<p class="item-summary">' + esc(summaryText) + '</p>'
+      + '<p class="item-summary" style="font-size:15px; color:#e0e6f0; font-weight:500; line-height:1.5; margin:8px 0; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">' + esc(summaryText) + '</p>'
       + '<div class="meta">영향도 ' + sign + esc(it.score) + ' · 유사 ' + esc(it.dup) + '건</div>'
       + '<div class="chips">' + sectors + '</div></div>';
   }
@@ -166,7 +173,7 @@
         });
       })
       .catch(function () {
-        modalBody.innerHTML = '<div class="empty">뉴스를 불러오지 못했습니다.</div>';
+        modalBody.innerHTML = '<div class="empty">서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.</div>';
       });
   }
 
@@ -177,7 +184,8 @@
     var item = e.target.closest('.item');
     if (item) {
       var groupId = item.getAttribute('data-group-id');
-      if (groupId) openArticlesModal(groupId, item.querySelector('h3').textContent);
+      var groupTitle = item.getAttribute('data-group-title');
+      if (groupId) openArticlesModal(groupId, groupTitle);
     }
   });
 
@@ -206,9 +214,16 @@
             '<span style="color:' + color + '; font-weight:600;">' + Number(p.stck_prpr).toLocaleString() + '</span>';
           rowEl.querySelector('.st-change').innerHTML =
             '<span style="color:' + color + ';">' + vrss + '<br><span style="font-size:11px;">(' + p.prdy_ctrt + '%)</span></span>';
-          rowEl.querySelector('.st-vol').innerHTML = Number(p.acml_vol).toLocaleString();
-          rowEl.querySelector('.st-amt').innerHTML = Math.floor(Number(p.acml_tr_pbmn) / 100000000).toLocaleString() + '억';
-          rowEl.querySelector('.st-cap').innerHTML = Number(p.hts_avls).toLocaleString() + '억';
+          // 거래량/거래대금/시총: 값이 있고 0보다 클 때만 갱신 (없으면 직전 값 유지 → 0 깜빡임 방지)
+          if (p.acml_vol != null && Number(p.acml_vol) > 0) {
+            rowEl.querySelector('.st-vol').innerHTML = Number(p.acml_vol).toLocaleString();
+          }
+          if (p.acml_tr_pbmn != null && Number(p.acml_tr_pbmn) > 0) {
+            rowEl.querySelector('.st-amt').innerHTML = Math.floor(Number(p.acml_tr_pbmn) / 100000000).toLocaleString() + '억';
+          }
+          if (p.hts_avls != null && Number(p.hts_avls) > 0) {
+            rowEl.querySelector('.st-cap').innerHTML = Number(p.hts_avls).toLocaleString() + '억';
+          }
         }
         /* 매출액·영업이익 (DART) */
         if (data.finance && data.finance.list) {
@@ -528,17 +543,41 @@
 
   /* ───────────── 수집·분석 버튼 ───────────── */
   var collectBtn = document.getElementById('collectBtn');
+  var pollInterval = null;
+
+  function checkCollectStatus(btn) {
+    fetch(ctx + '/api/collect/status')
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res.running) {
+          // 여전히 실행 중이면 2초 뒤 다시 체크
+          pollInterval = setTimeout(function() { checkCollectStatus(btn); }, 2000);
+        } else {
+          // 실행 완료! 화면 갱신
+          load();
+          btn.disabled = false;
+          btn.textContent = '분석·요약 실행';
+        }
+      })
+      .catch(function() {
+        // 에러 발생 시 초기화
+        btn.disabled = false;
+        btn.textContent = '분석·요약 실행';
+      });
+  }
+
   if (collectBtn) {
     collectBtn.addEventListener('click', function () {
       var btn = this;
-      btn.disabled = true; btn.textContent = '수집 중…';
+      btn.disabled = true;
+      btn.textContent = '분석 중…';
       fetch(ctx + '/collect/run', { method: 'POST', headers: { 'X-CSRF-Token': csrf } })
         .then(function () {
-          setTimeout(function () {
-            load(); btn.disabled = false; btn.textContent = '수집·분석 실행';
-          }, 2500);
+          // 비동기 호출 성공, 폴링 시작
+          if (pollInterval) clearTimeout(pollInterval);
+          setTimeout(function() { checkCollectStatus(btn); }, 1000);
         })
-        .catch(function () { btn.disabled = false; btn.textContent = '수집·분석 실행'; });
+        .catch(function () { btn.disabled = false; btn.textContent = '분석·요약 실행'; });
     });
   }
 

@@ -52,8 +52,15 @@ public final class SettingsService {
 
     public static List<String> getKeywords() {
         List<String> list = new ArrayList<>();
-        // 1. 거시/주요 키워드
-        String raw = get("collect.keywords", "코스피,코스닥,KRX,KONEX,다우,나스닥,환율,유가,금,은");
+        // 1. 수집 범위 키워드: 증시/경제/정책/과학·기술/산업 등 주가에 영향이 있는 분야.
+        //    (상장 종목명은 아래 2)에서 stock_master 전체로 자동 포함)
+        //    실제 운영값은 collect_settings 의 collect.keywords (db/collect_keywords_scope.sql) 가 우선.
+        String raw = get("collect.keywords",
+                "증시,코스피,코스닥,주가,상장,공모주,IPO,나스닥,다우,S&P500,"
+                + "경제,금리,기준금리,환율,물가,인플레이션,경기,수출,수입,무역,관세,유가,원자재,부동산,한국은행,연준,달러,금,은,GDP,"
+                + "정책,규제,세제,예산,파업,선거,"
+                + "인공지능,AI,배터리,전기차,신약,로봇,우주항공,자율주행,데이터센터,특허,"
+                + "반도체,바이오,2차전지,자동차,조선,방산,금융,원전,사료,철강,건설,화학,엔터테인먼트,IT,게임,통신,기계,항공,화장품,음식료");
         Arrays.stream(raw.split(","))
               .map(String::trim).filter(s -> !s.isEmpty())
               .forEach(list::add);

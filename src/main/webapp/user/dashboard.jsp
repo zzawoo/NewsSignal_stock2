@@ -20,6 +20,11 @@
     <div class="card-header-flex">
       <h2>주요 이슈</h2>
       <div class="controls">
+        <select id="issuePeriod" class="form-select">
+          <option value="all">전체</option>
+          <option value="today">당일</option>
+          <option value="yesterday">전일</option>
+        </select>
         <select id="issueFilter" class="form-select">
           <option value="ALL">전체</option>
           <option value="GOOD">호재</option>
@@ -71,7 +76,7 @@
 
 <!-- 종목 상세 모달 -->
 <div id="stockDetailModal" class="modal-overlay" style="display: none;">
-  <div class="modal-box" style="max-width: 800px; padding: 0;">
+  <div class="modal-box" style="max-width: 1160px; width: 96vw; padding: 0;">
     <div class="modal-header" style="padding: 16px 20px;">
       <h3 id="stockModalTitle">종목명 (종목코드)</h3>
       <button id="stockModalCloseBtn" class="modal-close">&times;</button>
@@ -81,6 +86,6 @@
     </div>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="<%=request.getContextPath()%>/resources/js/lightweight-charts.standalone.production.js"></script>
 <script charset="UTF-8" src="<%=request.getContextPath()%>/resources/js/dashboard.js?v=<%=System.currentTimeMillis()%>"></script>
 <%@ include file="/common/footer.jsp" %>

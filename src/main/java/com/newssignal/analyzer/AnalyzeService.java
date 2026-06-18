@@ -131,25 +131,26 @@ public class AnalyzeService {
                 }
             } catch (Exception e) {
                 String msg = e.getMessage();
-                boolean rateLimited = msg != null && (msg.contains("429") || msg.contains("RESOURCE_EXHAUSTED"));
-                if (rateLimited && (msg.contains("PerDay") || msg.contains("per day"))) {
-                    // 일일 한도(RPD) 소진 → 이번 실행 중단 (다음 실행/다음 날 재개)
+                boolean rateLimited = msg != null && (msg.contains("429") || msg.contains("RESOURCE_EXHAUSTED")
+                        || msg.contains("Rate limit") || msg.contains("rate_limit"));
+                // Gemini는 일일 한도(20/일)가 진짜 병목 → PerDay면 즉시 중단.
+                // Groq는 일일 한도가 넉넉하고 분당(RPM)이 병목 → 429라도 잠깐 대기 후 재시도.
+                if (rateLimited && !useGroq && (msg.contains("PerDay") || msg.contains("per day"))) {
                     System.err.println("[AnalyzeService] LLM daily quota (RPD) exhausted. Stopping this run.");
                     break;
                 } else if (rateLimited) {
                     retryStreak++;
                     if (retryStreak > maxRetryPerBatch) {
-                        // 연속 rate limit이 상한 초과 → 현재 한도가 풀리지 않는 상태로 보고 이번 실행 종료.
-                        // (livelock 방지. 다음 스케줄(60초 후)에서 재개)
                         System.err.println("[AnalyzeService] Rate limit persists ("
                                 + retryStreak + "x). Ending this run; will resume next schedule.");
                         break;
                     }
-                    // 일시적 제한 → 백오프 후 같은 배치 재시도 (인덱스 되돌림)
-                    String detail = msg.length() > 220 ? msg.substring(0, 220) : msg;
-                    System.err.println("[AnalyzeService] Transient rate limit (429) on batch starting " + i
-                            + " (retry " + retryStreak + "/" + maxRetryPerBatch + "), backing off 20s. detail=" + detail);
-                    try { Thread.sleep(20000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    // 429: 응답이 알려주는 'try again in Xs'만큼(없으면 20s) 대기 후 같은 배치 재시도
+                    long waitMs = parseRetryMillis(msg, 20000);
+                    String detail = msg.length() > 200 ? msg.substring(0, 200) : msg;
+                    System.err.println("[AnalyzeService] Rate limit (429) on batch starting " + i
+                            + " (retry " + retryStreak + "/" + maxRetryPerBatch + "), wait " + (waitMs / 1000) + "s. " + detail);
+                    try { Thread.sleep(waitMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
                     i -= batchSize;
                 } else {
                     System.err.println("[AnalyzeService] Failed to analyze batch starting " + i + ": " + msg);
@@ -579,8 +580,9 @@ public class AnalyzeService {
         for (UnanalyzedGroup g : batch) {
             JsonObject in = new JsonObject();
             in.addProperty("id", g.groupId);
-            in.addProperty("title", trunc(g.title, 400));
-            in.addProperty("desc", trunc(g.description, 1200));
+            // Groq 무료 TPM(분당 토큰) 절약: 입력 길이를 짧게(대표 제목/요약 위주로 판정 충분)
+            in.addProperty("title", trunc(g.title, 220));
+            in.addProperty("desc", trunc(g.description, 450));
             inputs.add(in);
         }
 
@@ -713,6 +715,21 @@ public class AnalyzeService {
         if (s == null) return "";
         s = s.trim();
         return s.length() > max ? s.substring(0, max) : s;
+    }
+
+    /** 429 메시지의 'try again in 12.3s' 를 ms로 파싱(1~60s clamp). 없으면 def. */
+    private static long parseRetryMillis(String msg, long def) {
+        if (msg == null) return def;
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("try again in ([0-9]+(?:\\.[0-9]+)?)\\s*s", java.util.regex.Pattern.CASE_INSENSITIVE)
+                    .matcher(msg);
+            if (m.find()) {
+                long ms = (long) (Double.parseDouble(m.group(1)) * 1000) + 800;
+                return Math.min(Math.max(ms, 1000), 60000);
+            }
+        } catch (Exception ignore) {}
+        return def;
     }
 
     /** Gemini generateContent 호출 후 후보 텍스트를 반환 (단일/배치 공용). */

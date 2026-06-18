@@ -19,8 +19,11 @@ public class MacroInfoServlet extends HttpServlet {
 
         JsonObject result = new JsonObject();
         try {
-            JsonObject prices = MacroDataClient.getMacroPrices();
-            result.add("prices", prices);
+            if ("sparkline".equals(req.getParameter("type"))) {
+                result.add("sparklines", MacroDataClient.getSparklines());
+            } else {
+                result.add("prices", MacroDataClient.getMacroPrices());
+            }
             result.addProperty("status", "success");
         } catch (Exception e) {
             e.printStackTrace();

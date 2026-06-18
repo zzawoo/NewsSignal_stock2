@@ -18,6 +18,23 @@ public class DartApiClient {
     private static final Map<String, String> stockToCorpMap = new HashMap<>();
     private static boolean initialized = false;
 
+    /* ── 기업/재무 정보 메모리 캐시 (DB 미사용, 24시간 유지) ──
+       기업개황·재무는 하루 단위로 거의 안 바뀌므로 한 번 받으면 24h 재사용한다. */
+    private static final long CACHE_TTL_MS = 24L * 60 * 60 * 1000; // 24시간
+    private static final Map<String, Cached> cache = new java.util.concurrent.ConcurrentHashMap<String, Cached>();
+    private static final class Cached {
+        final JsonObject data; final long ts;
+        Cached(JsonObject data, long ts) { this.data = data; this.ts = ts; }
+    }
+    private static JsonObject fromCache(String key) {
+        Cached c = cache.get(key);
+        return (c != null && System.currentTimeMillis() - c.ts < CACHE_TTL_MS) ? c.data : null;
+    }
+    private static JsonObject toCache(String key, JsonObject data) {
+        if (data != null) cache.put(key, new Cached(data, System.currentTimeMillis()));
+        return data;
+    }
+
     private static synchronized void initMapping() {
         if (initialized) return;
         if (API_KEY == null || API_KEY.trim().isEmpty()) {
@@ -76,6 +93,8 @@ public class DartApiClient {
     }
 
     public static JsonObject getCompanyInfo(String stockCode) {
+        JsonObject hit = fromCache("company:" + stockCode);
+        if (hit != null) return hit;
         if (!initialized) {
             initMapping();
         }
@@ -96,7 +115,7 @@ public class DartApiClient {
                 Gson gson = new Gson();
                 JsonObject response = gson.fromJson(isr, JsonObject.class);
                 if (response.has("status") && "000".equals(response.get("status").getAsString())) {
-                    return response;
+                    return toCache("company:" + stockCode, response);
                 }
             }
         } catch (Exception e) {
@@ -106,6 +125,8 @@ public class DartApiClient {
     }
 
     public static JsonObject getFinanceInfo(String stockCode) {
+        JsonObject hit = fromCache("finance:" + stockCode);
+        if (hit != null) return hit;
         if (!initialized) {
             initMapping();
         }
@@ -132,7 +153,7 @@ public class DartApiClient {
                 Gson gson = new Gson();
                 JsonObject response = gson.fromJson(isr, JsonObject.class);
                 if (response.has("status") && "000".equals(response.get("status").getAsString())) {
-                    return response;
+                    return toCache("finance:" + stockCode, response);
                 }
             }
         } catch (Exception e) {

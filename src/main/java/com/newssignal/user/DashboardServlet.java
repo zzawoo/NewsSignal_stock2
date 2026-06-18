@@ -29,11 +29,14 @@ public class DashboardServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        // 주요 이슈 기간 필터: all(기본, 당일+전일) | today(당일) | yesterday(전일)
+        String period = req.getParameter("period");
+
         Map<String, Object> result = new HashMap<>();
         try (Connection c = Db.conn()) {
             result.put("summary", summary(c));
-            result.put("topIssues", topIssues(c));
-            result.put("moreIssues", moreIssues(c));
+            result.put("topIssues", topIssues(c, period));
+            result.put("moreIssues", moreIssues(c, period));
             result.put("goodNews", newsByType(c, "GOOD", true));
             result.put("badNews", newsByType(c, "BAD", false));
             result.put("sectors", sectors(c));
@@ -60,47 +63,60 @@ public class DashboardServlet extends HttpServlet {
         return m;
     }
 
+    private static final String ISSUE_ORDER = "ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC";
+    private static final String ISSUE_COLS = "SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count FROM news_similarity_group ";
+    private static final String TODAY_COND = "DATE(last_collected_at) = CURDATE()";
+    private static final String YDAY_COND  = "DATE(last_collected_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+    private static final int MORE_PER_DAY = 40; // 한 날짜당 헤드라인 외 표시 상한
+
     /**
-     * 호재 2 + 악재 2 + 중립·혼합 2 = 총 6개, 각 타입별 |impact_score| 강한 순.
+     * 주요 이슈 기간 필터 SQL 조건. 고정 화이트리스트라 인젝션 안전.
+     *  - today: 당일 뉴스, yesterday: 전일 뉴스
+     *  - all(기본): 당일 + 전일(2일) 합산
      */
-    private List<Map<String, Object>> topIssues(Connection c) throws Exception {
+    private String issueDateCond(String period) {
+        if ("today".equals(period))     return TODAY_COND;
+        if ("yesterday".equals(period)) return YDAY_COND;
+        return "DATE(last_collected_at) >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)"; // 전체 = 당일+전일
+    }
+
+    /** 호재2+악재2+중립2 헤드라인 6개 id 집합 (LIMIT가 파생테이블 내부라 IN에서 허용됨). */
+    private String top6IdsSubquery(String dc) {
+        return "SELECT id FROM ("
+            + "(SELECT id FROM news_similarity_group WHERE good_bad_type='GOOD' AND " + dc + " " + ISSUE_ORDER + " LIMIT 2) "
+            + "UNION ALL (SELECT id FROM news_similarity_group WHERE good_bad_type='BAD' AND " + dc + " " + ISSUE_ORDER + " LIMIT 2) "
+            + "UNION ALL (SELECT id FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND " + dc + " " + ISSUE_ORDER + " LIMIT 2)"
+            + ") AS top6";
+    }
+
+    /** 헤드라인 6개: 각 타입별 |impact_score| 강한 순(기간 한정). */
+    private List<Map<String, Object>> topIssues(Connection c, String period) throws Exception {
+        String dc = issueDateCond(period);
         String sql =
-            "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type = 'GOOD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
-          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
-          + "UNION ALL "
-          + "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type = 'BAD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
-          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
-          + "UNION ALL "
-          + "(SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + " FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
-          + " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
-          + "ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC";
+            "(" + ISSUE_COLS + "WHERE good_bad_type='GOOD' AND " + dc + " " + ISSUE_ORDER + " LIMIT 2) "
+          + "UNION ALL (" + ISSUE_COLS + "WHERE good_bad_type='BAD' AND " + dc + " " + ISSUE_ORDER + " LIMIT 2) "
+          + "UNION ALL (" + ISSUE_COLS + "WHERE good_bad_type IN ('NEUTRAL','MIXED') AND " + dc + " " + ISSUE_ORDER + " LIMIT 2) "
+          + ISSUE_ORDER;
         return rows(c, sql, null, false);
     }
 
     /**
-     * 위 top 6에 포함되지 않은 나머지 전체 이슈, |impact_score| 강한 순.
+     * 헤드라인 6개를 제외한 나머지 이슈.
+     *  - 당일/전일: 해당 일자에서 최대 MORE_PER_DAY개.
+     *  - 전체: 당일·전일 각각 MORE_PER_DAY개씩 합산(날짜 균형 — 한쪽 날짜가 상위를 독식하지 않게).
      */
-    private List<Map<String, Object>> moreIssues(Connection c) throws Exception {
-        // top 6 id 집합을 서브쿼리로 제외
-        String sql =
-            "SELECT id, group_title, group_summary, good_bad_type, impact_score, related_sectors, duplicate_count "
-          + "FROM news_similarity_group "
-          + "WHERE last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) AND id NOT IN ("
-          +   "SELECT id FROM ("
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'GOOD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
-          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
-          +     "UNION ALL "
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type = 'BAD' AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
-          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2) "
-          +     "UNION ALL "
-          +     "(SELECT id FROM news_similarity_group WHERE good_bad_type IN ('NEUTRAL','MIXED') AND last_collected_at >= DATE_SUB(NOW(), INTERVAL 3 DAY) "
-          +      " ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 2)"
-          +   ") AS top6"
-          + ") "
-          + "ORDER BY ABS(impact_score) DESC, duplicate_count DESC, id DESC LIMIT 20";
+    private List<Map<String, Object>> moreIssues(Connection c, String period) throws Exception {
+        String dc = issueDateCond(period);
+        String notTop = "id NOT IN (" + top6IdsSubquery(dc) + ")";
+        boolean isAll = !"today".equals(period) && !"yesterday".equals(period);
+        String sql;
+        if (isAll) {
+            sql = "(" + ISSUE_COLS + "WHERE " + TODAY_COND + " AND " + notTop + " " + ISSUE_ORDER + " LIMIT " + MORE_PER_DAY + ") "
+                + "UNION ALL "
+                + "(" + ISSUE_COLS + "WHERE " + YDAY_COND + " AND " + notTop + " " + ISSUE_ORDER + " LIMIT " + MORE_PER_DAY + ")";
+        } else {
+            sql = ISSUE_COLS + "WHERE " + dc + " AND " + notTop + " " + ISSUE_ORDER + " LIMIT " + MORE_PER_DAY;
+        }
         return rows(c, sql, null, false);
     }
 

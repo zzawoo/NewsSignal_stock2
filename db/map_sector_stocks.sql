@@ -8,10 +8,16 @@
 -- =====================================================================
 USE newssignal;
 
--- 반도체
+-- 반도체 (KRX '반도체 제조업'만 사용)
+--  · '전자부품 제조업'은 디스플레이(LG디스플레이)·PCB(코리아써키트)·커넥터·카메라모듈·
+--    에너지소재(롯데에너지머티리얼즈) 등 비반도체 잡음이 커 제외.
+--  · '반도체 제조업'으로 오분류된 태양광(HD현대에너지솔루션/신성이엔지)·디스플레이(일진디스플)는 NOT IN 제외.
+--  · 반도체 장비·소재(원익IPS/한미반도체/이오테크닉스 등)는 schema.sql 큐레이션 시드로 보강됨.
 INSERT IGNORE INTO sector_stock_map (sector_id, stock_code)
 SELECT (SELECT id FROM sector_master WHERE sector_name='반도체'), stock_code
-FROM stock_master WHERE industry REGEXP '반도체|전자부품|컴퓨터 및 주변장치';
+FROM stock_master
+WHERE industry = '반도체 제조업'
+  AND stock_name NOT IN ('HD현대에너지솔루션','신성이엔지','일진디스플');
 
 -- 2차전지
 INSERT IGNORE INTO sector_stock_map (sector_id, stock_code)
@@ -58,15 +64,19 @@ INSERT IGNORE INTO sector_stock_map (sector_id, stock_code)
 SELECT (SELECT id FROM sector_master WHERE sector_name='IT'), stock_code
 FROM stock_master WHERE industry REGEXP '소프트웨어|컴퓨터 프로그래밍|정보 서비스';
 
--- 음식료 (식품/음료/작물/도축)
+-- 음식료 (식품/음료/작물/도축) — 동물용 사료는 별도 '사료' 섹터이므로 제외('조제식품'의 '식품'에 잘못 매칭됨)
 INSERT IGNORE INTO sector_stock_map (sector_id, stock_code)
 SELECT (SELECT id FROM sector_master WHERE sector_name='음식료'), stock_code
-FROM stock_master WHERE industry REGEXP '식품|음료|작물 재배|도축';
+FROM stock_master WHERE industry REGEXP '식품|음료|작물 재배|도축'
+  AND industry <> '동물용 사료 및 조제식품 제조업';
 
--- 엔터테인먼트 (영화/방송/음반/영상)
+-- 엔터테인먼트 (영화/방송/음반/영상 콘텐츠)
+--  · '통신 및 방송 장비 제조업'(안테나·통신장비), '영상 및 음향기기 제조업'(TV/스피커 등 하드웨어)은
+--    콘텐츠가 아니라 제조업이므로 제외('방송'/'영상' 토큰에 잘못 매칭됨).
 INSERT IGNORE INTO sector_stock_map (sector_id, stock_code)
 SELECT (SELECT id FROM sector_master WHERE sector_name='엔터테인먼트'), stock_code
-FROM stock_master WHERE industry REGEXP '영화|방송|오디오물|영상';
+FROM stock_master WHERE industry REGEXP '영화|방송|오디오물|영상'
+  AND industry NOT IN ('통신 및 방송 장비 제조업','영상 및 음향기기 제조업');
 
 -- 조선 (선박 및 보트)
 INSERT IGNORE INTO sector_stock_map (sector_id, stock_code)

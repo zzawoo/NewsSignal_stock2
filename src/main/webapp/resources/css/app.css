@@ -21,7 +21,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Malgun Gothic',system-ui
 nav{margin-left:auto;display:flex;gap:18px}
 nav a{color:var(--ink2);text-decoration:none;font-size:14px}
 nav a:hover{color:var(--accent)}
-.deck{display:flex;align-items:center;gap:14px;padding:16px 24px;border-bottom:1px solid var(--line)}
+.deck{display:flex;align-items:center;flex-wrap:wrap;gap:14px;padding:16px 24px;border-bottom:1px solid var(--line)}
+@media(max-width:640px){.deck-search{flex-basis:100% !important;margin-left:0 !important}}
 .hint{font-size:12px;color:var(--ink3)}
 .btn{padding:11px 18px;border-radius:9px;border:1px solid var(--line2);background:var(--panel2);color:var(--ink);font-size:14px;cursor:pointer;text-decoration:none}
 .btn.primary{background:linear-gradient(180deg,#5a97ff,#3f7ce8);border-color:#5a97ff;color:#fff;font-weight:600}
@@ -70,11 +71,11 @@ nav a:hover{color:var(--accent)}
 .macro-grid .m-item .m-name { font-size: 13px; color: var(--ink3); margin-bottom: 6px; font-weight: 500; }
 .macro-grid .m-item .m-val { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
 .macro-grid .m-item .m-meta { font-size: 11px; color: var(--ink2); }
-.issues{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);min-width:0;width:100%;box-sizing:border-box}
-.item{background:var(--panel);padding:14px 16px;border-bottom:1px solid var(--line);min-width:0}
+.issues{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:222px;gap:1px;background:var(--line);min-width:0;width:100%;box-sizing:border-box}
+.item{background:var(--panel);padding:14px 16px;border-bottom:1px solid var(--line);min-width:0;overflow:hidden}
 .news .item:last-child{border-bottom:0}
 .sig{display:inline-block;font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;margin-bottom:8px}
-.sig.good{color:var(--good);background:#0e2f24}.sig.bad{color:var(--bad);background:#331620}
+.sig.good{color:var(--bad);background:#331620}.sig.bad{color:var(--good);background:#0e2f24}
 .sig.neutral{color:var(--neu);background:#1c2333}.sig.mixed{color:var(--mix);background:#2e2410}
 .item h3{font-size:14px;font-weight:600;line-height:1.4;margin-bottom:7px}
 .item-title{font-size:11px;font-weight:500;color:var(--ink3);line-height:1.3;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -91,14 +92,82 @@ nav a:hover{color:var(--accent)}
 .srow:last-child{border-bottom:0}
 .srow:hover{background:var(--panel2)}
 .srow .line1{display:flex;align-items:center;gap:11px;margin-bottom:9px}
-.srow .sname{font-size:14px;font-weight:600;letter-spacing:-.01em}
-.srow .stype{font-size:10px;color:var(--ink3);border:1px solid var(--line2);border-radius:4px;padding:1px 6px}
-.srow .savg{margin-left:auto;font-size:13px;font-weight:600}
+.srow .sname{font-size:14px;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.srow .stype{font-size:10px;color:var(--ink3);border:1px solid var(--line2);border-radius:4px;padding:1px 6px;white-space:nowrap;flex:0 0 auto}
+.srow .line1{flex-wrap:wrap}
+/* 동적 카드(핫이슈/히트맵/오늘의종목/실적발표) 제목 — div 안이라 기본 h2(큰 글씨) 상속 방지 */
+#hotIssueCard h2,#heatmapCard h2,#moversCard h2,#earningsCard h2{font-size:16px;font-weight:700;white-space:nowrap}
+
+/* 모바일 대응 */
+@media(max-width:640px){
+  #hotIssueCard h2,#heatmapCard h2,#moversCard h2,#earningsCard h2{font-size:15px}
+  #hotIssueCard [data-f="hi-headline"]{font-size:14px !important}
+  .srow{padding:11px 14px}
+  .srow .line1{gap:6px 8px}
+  .srow .sname{font-size:13px}
+  .er-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  #heatmapBox{height:520px !important}   /* 모바일: 세로 키워 작은 타일 이름 표시 여유 */
+  .hm-tile{padding:1px}
+  .hm-tile .nm{line-height:1.05}
+}
+/* 종목 상세 모달: 좁은 화면에선 기업정보/차트를 세로로 쌓아 컨트롤 뭉개짐 방지 */
+@media(max-width:760px){
+  .sd-layout{flex-direction:column !important;padding:12px !important;gap:12px !important}
+  .sd-layout > #sd-company{flex:1 1 auto !important;min-width:0 !important;width:100%}
+  .sd-layout > .sd-chartcol{flex:1 1 auto !important;width:100%;min-width:0}
+}
+.srow .savg{margin-left:auto;font-size:13px;font-weight:600;white-space:nowrap}
 .gbbar{display:flex;height:7px;border-radius:4px;overflow:hidden;background:var(--bg2);margin-bottom:9px}
-.gbbar .g{background:var(--good)}.gbbar .n{background:var(--neu)}.gbbar .b{background:var(--bad)}
+.gbbar .g{background:var(--bad)}.gbbar .n{background:var(--neu)}.gbbar .b{background:var(--good)}
 .gbcount{display:flex;gap:14px;font-size:11px;margin-bottom:9px}
 .gbcount span{display:flex;align-items:center;gap:5px;color:var(--ink2)}
 .gbcount .d{width:8px;height:8px;border-radius:2px}
+
+/* 히트맵 + 오늘의 종목 2단 레이아웃 */
+.market-row{display:grid;grid-template-columns:2fr 1fr;gap:18px;margin-bottom:18px;align-items:start}
+.market-row>.card{margin-bottom:0;height:100%}
+@media(max-width:1000px){.market-row{grid-template-columns:1fr}}
+#moversBox::-webkit-scrollbar{width:6px}
+#moversBox::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+/* 히트맵·오늘의 종목 탭 */
+.hm-tab,.mv-tab{padding:5px 12px;cursor:pointer;border-radius:7px;font-size:12px;font-weight:700;border:1px solid #2a3a55;background:#16203a;color:#7d92b0;transition:all .15s}
+.hm-tab:hover,.mv-tab:hover{color:#cdd9ea}
+.hm-tab.on,.mv-tab.on{background:#3d4e6e;color:#fff;border-color:#5a97ff}
+/* 히트맵 타일 */
+.hm-tile{position:absolute;box-sizing:border-box;border:1px solid rgba(10,16,28,.85);overflow:hidden;cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:2px}
+.hm-tile:hover{outline:2px solid #fff;outline-offset:-2px;z-index:5}
+.hm-tile .nm{font-weight:700;line-height:1.15;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.hm-tile .pc{color:rgba(255,255,255,.92);line-height:1.2}
+/* 오늘의 종목 랭킹 행 */
+.mv-row{display:flex;align-items:center;gap:8px;padding:9px 4px;border-bottom:1px solid #1e2942;cursor:pointer}
+.mv-row:hover{background:#141d33}
+.mv-row .rk{width:20px;text-align:center;font-size:12px;font-weight:700;color:#7d92b0;flex:0 0 auto}
+.mv-row .nm{font-size:13px;font-weight:600;color:#dce6f5;flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mv-row .cd{font-size:10.5px;color:#6f83a0}
+.mv-row .prc{font-size:12.5px;font-weight:600;color:#e0e6f0;flex:0 0 auto;text-align:right;min-width:58px}
+.mv-row .val{font-size:11.5px;color:#9fb0c8;flex:0 0 auto;text-align:right;min-width:48px}
+.mv-row .pc{font-size:12.5px;font-weight:700;flex:0 0 auto;width:62px;text-align:right}
+/* 실적발표 — 날짜별 컬럼 카드 */
+.er-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:12px}
+.er-day{background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.er-day.er-today{border-color:#5a97ff;box-shadow:0 0 0 1px rgba(90,151,255,.35)}
+.er-day.er-up{border-color:#3a4a72}
+.er-day.er-up .er-day-head{background:rgba(122,162,255,.13)}
+.er-sub{font-size:13px;font-weight:700;color:#e8eef7;margin:0 0 10px}
+.er-sub small{font-size:11px;color:#7d92b0;font-weight:400;margin-left:5px}
+.er-day-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 11px;border-bottom:1px solid var(--line);background:rgba(90,151,255,.07)}
+.er-date{font-size:12.5px;font-weight:700;color:#e8eef7;white-space:nowrap}
+.er-date small{color:#7d92b0;font-weight:400}
+.er-badge{font-size:9.5px;background:#5a97ff;color:#fff;border-radius:4px;padding:1px 5px;margin-left:3px;font-weight:700}
+.er-cnt{font-size:11px;color:#9fc0ff;font-weight:600;white-space:nowrap}
+.er-list{height:161px;overflow-y:auto;padding:3px 0}
+.er-list::-webkit-scrollbar{width:5px}.er-list::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+.er-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 11px;cursor:pointer}
+.er-item:hover{background:#141d33}
+.er-nm{font-size:12.5px;color:#dce6f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.er-cd{font-size:10.5px;color:#6f83a0;flex:0 0 auto;display:flex;align-items:center;gap:4px}
+.er-mk{font-size:9px;font-weight:700;border-radius:3px;padding:1px 4px;color:#fff}
+.er-mk.kp{background:#c8506e}.er-mk.kd{background:#2f8f6b}
 .stocks-list-wrapper{padding:0}
 
 /* stock-row: table context (테이블 <tr>로 렌더링될 때) */

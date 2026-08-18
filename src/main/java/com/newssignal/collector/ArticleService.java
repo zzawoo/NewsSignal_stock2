@@ -50,6 +50,7 @@ public class ArticleService {
 
         int newCnt = 0;
         int dupCnt = 0;
+        int filteredCnt = 0;
 
         try (Connection conn = Db.conn()) {
             conn.setAutoCommit(false);
@@ -57,22 +58,34 @@ public class ArticleService {
                 // 최근 24시간 이내의 활성 유사도 그룹 목록 조회
                 List<ActiveGroup> activeGroups = fetchActiveGroups(conn);
 
+                // 유사도 방식: jaccard(기본) | tfidf(IDF 가중 코사인 — 변별력 있는 용어 중심, 과병합↓).
+                boolean useTfidf = "tfidf".equalsIgnoreCase(SettingsService.get("similarity.method", "jaccard"));
+                double thSec   = SettingsService.getDouble("similarity.tfidf.sector", 0.16);
+                double thTitle = SettingsService.getDouble("similarity.tfidf.title", 0.28);
+                java.util.Map<String, Double> idf = null;
+                if (useTfidf) {
+                    List<String> corpus = new ArrayList<>();
+                    for (ActiveGroup g : activeGroups) corpus.add(g.title);
+                    for (NewsArticleDTO a : articles) corpus.add(a.title);
+                    idf = similarityService.computeIdf(corpus);
+                    for (ActiveGroup g : activeGroups) g.tfidf = similarityService.tfidfVector(g.title, idf);
+                }
+
+                String[] blockPatterns = parseBlockPatterns();
                 for (NewsArticleDTO article : articles) {
+                    // 0. 관련성·품질 필터: 주식 무관 / 단순 시황 recap / 찍어내기성(리스트·평판) 기사 제외
+                    if (isNoise(article.title, blockPatterns)) { filteredCnt++; continue; }
+
                     // 1. content_hash 계산
                     String hash = similarityService.contentHash(article.title, article.press);
                     article.contentHash = hash;
 
-                    // 2. 완전 중복 검사 (동일 content_hash 기사 존재 여부)
+                    // 2. 완전 중복 검사 (동일 content_hash = 같은 제목·언론사 기사)
                     Long existingId = checkDuplicateHash(conn, hash);
                     if (existingId != null) {
                         dupCnt++;
-                        // 완전 중복 시 DB에 새로 기사를 추가하지 않고 그룹 카운트만 증가
-                        Long groupId = getGroupIdByArticle(conn, existingId);
-                        if (groupId != null) {
-                            incrementGroupDuplicateCount(conn, groupId);
-                        } else {
-                            incrementGroupDuplicateCountByArticle(conn, existingId);
-                        }
+                        // 같은 기사 '재수집'은 새 보도가 아니므로 duplicate_count를 올리지 않는다.
+                        //   (수집이 10분마다 같은 인기기사를 반복 가져와 dup이 실제 기사수의 수십 배로 폭증하던 버그)
                         continue;
                     }
 
@@ -82,9 +95,13 @@ public class ArticleService {
                     newCnt++;
 
                     // 4. 유사 이슈 매칭 (최근 24시간 활성 그룹 대상)
+                    java.util.Map<String, Double> aVec = useTfidf ? similarityService.tfidfVector(article.title, idf) : null;
                     ActiveGroup matchedGroup = null;
                     for (ActiveGroup group : activeGroups) {
-                        if (similarityService.isSameIssue(article.title, article.sectorKeywords, group.title, group.sectors)) {
+                        boolean same = useTfidf
+                                ? similarityService.isSameIssueVec(aVec, article.sectorKeywords, group.tfidf, group.sectors, thSec, thTitle)
+                                : similarityService.isSameIssue(article.title, article.sectorKeywords, group.title, group.sectors);
+                        if (same) {
                             matchedGroup = group;
                             break;
                         }
@@ -92,13 +109,14 @@ public class ArticleService {
 
                     if (matchedGroup != null) {
                         // 매칭되는 그룹이 있는 경우: 기존 그룹에 매핑 (duplicate_yn = 'Y')
-                        mapToGroup(conn, matchedGroup.id, articleId, similarityService.jaccard(article.title, matchedGroup.title));
-                        
+                        mapToGroup(conn, matchedGroup.id, articleId, useTfidf ? similarityService.cosine(aVec, matchedGroup.tfidf) : similarityService.jaccard(article.title, matchedGroup.title));
+
                         // 새로운 기사가 기존 그룹 대표 기사보다 최신인 경우 대표 기사 교체
                         if (article.pubDate != null && (matchedGroup.repPubDate == null || article.pubDate.isAfter(matchedGroup.repPubDate))) {
                             updateGroupRepresentative(conn, matchedGroup.id, articleId, article.title);
                             matchedGroup.title = article.title;
                             matchedGroup.repPubDate = article.pubDate;
+                            if (useTfidf) matchedGroup.tfidf = aVec;
                         }
                         
                         updateGroup(conn, matchedGroup.id, article.sectorKeywords, matchedGroup.sectors);
@@ -125,6 +143,7 @@ public class ArticleService {
                         if (article.sectorKeywords != null) {
                             newGroup.sectors.addAll(article.sectorKeywords);
                         }
+                        if (useTfidf) newGroup.tfidf = aVec;
                         activeGroups.add(newGroup);
 
                         // 섹터 마스터 등록 및 그룹-섹터 관계 매핑
@@ -147,12 +166,31 @@ public class ArticleService {
                 conn.rollback();
                 throw e;
             }
-            writeLog(keyword, articles.size(), newCnt, dupCnt, "SUCCESS", "Saved " + newCnt + " new, " + dupCnt + " duplicates");
+            writeLog(keyword, articles.size(), newCnt, dupCnt, "SUCCESS", "Saved " + newCnt + " new, " + dupCnt + " duplicates, " + filteredCnt + " filtered");
         } catch (Exception e) {
             System.err.println("[ArticleService] saveAll failed: " + e.getMessage());
             e.printStackTrace();
             writeLog(keyword, articles.size(), 0, 0, "ERROR", e.getMessage());
         }
+    }
+
+    /**
+     * 수집 노이즈 필터 패턴(제목 기준). 주식 무관 기사 + 단순 시황 recap + 찍어내기성 리스트/평판 차단.
+     * `collect.block.patterns`(콤마구분) 설정으로 코드 수정 없이 튜닝 가능.
+     */
+    private static String[] parseBlockPatterns() {
+        String def = "[상한가,[하한가,[52주,[표],fnRASSI,브랜드평판,약보합,강보합,상승 마감,하락 마감,혼조 마감,보합 마감,상승 출발,하락 출발,장마감,증시 마감,코스피 마감,코스닥 마감,지수 마감,마감 시황,포토],육상대회,교육감배,메달 획득,구인·구직,구인구직,만남의 날,관광청,채용설명회,봉사활동,헌혈,[부고,[인사,[동정,[게시판";
+        String raw = SettingsService.get("collect.block.patterns", def);
+        List<String> ps = new ArrayList<>();
+        for (String s : raw.split(",")) { s = s.trim(); if (!s.isEmpty()) ps.add(s); }
+        return ps.toArray(new String[0]);
+    }
+
+    /** 제목에 차단 패턴이 하나라도 포함되면 노이즈(주식 무관/단순 시황/찍어내기)로 간주. */
+    private static boolean isNoise(String title, String[] patterns) {
+        if (title == null || title.isEmpty()) return false;
+        for (String p : patterns) if (title.contains(p)) return true;
+        return false;
     }
 
     private Long checkDuplicateHash(Connection conn, String hash) throws SQLException {
@@ -305,16 +343,19 @@ public class ArticleService {
                 if (!merged.contains(s)) merged.add(s);
             }
         }
+        if (merged.size() > 6) merged = new ArrayList<>(merged.subList(0, 6)); // 칩 과다 방지(기사별 누적으로 30개까지 불어남)
         String sectorsStr = String.join(",", merged);
 
-        String sql = "UPDATE news_similarity_group SET duplicate_count = duplicate_count + 1, related_sectors = ?, last_collected_at = NOW(), updated_at = NOW() WHERE id = ?";
+        // 이미 분석된 그룹의 related_sectors(LLM 정제값)는 보존, 미분석 그룹만 갱신
+        String sql = "UPDATE news_similarity_group SET duplicate_count = duplicate_count + 1, related_sectors = IF(analyzed_yn='Y', related_sectors, ?), last_collected_at = NOW(), updated_at = NOW() WHERE id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, sectorsStr);
             ps.setLong(2, groupId);
             ps.executeUpdate();
         }
 
-        if (articleSectors != null) {
+        // 이미 분석된 그룹은 news_sector_map(섹터 패널 집계용)을 더 늘리지 않는다(LLM 정제 매핑 유지, 패널 재팽창 방지).
+        if (articleSectors != null && !isGroupAnalyzed(conn, groupId)) {
             for (String s : articleSectors) {
                 if (!groupSectors.contains(s)) {
                     Long sectorId = getOrCreateSectorId(conn, s);
@@ -323,6 +364,13 @@ public class ArticleService {
                     }
                 }
             }
+        }
+    }
+
+    private boolean isGroupAnalyzed(Connection conn, Long groupId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT analyzed_yn FROM news_similarity_group WHERE id = ?")) {
+            ps.setLong(1, groupId);
+            try (ResultSet rs = ps.executeQuery()) { return rs.next() && "Y".equals(rs.getString(1)); }
         }
     }
 
@@ -397,7 +445,8 @@ public class ArticleService {
         "반도체", "바이오", "2차전지", "자동차", "조선", "방산", "금융", "원전",
         "코스피", "코스닥", "나스닥", "환율", "금리", "지수", "거시경제",
         "유가", "금", "은", "달러",
-        "사료", "철강", "건설", "화학", "엔터테인먼트", "IT", "게임", "통신", "기계", "항공", "화장품", "음식료"
+        "사료", "철강", "건설", "화학", "엔터테인먼트", "IT", "게임", "통신", "기계", "항공", "화장품", "음식료",
+        "로봇", "비만치료제", "AI소프트웨어", "수소"
     );
 
     public static boolean isAllowedSector(String s) {
@@ -581,5 +630,6 @@ public class ArticleService {
         String title;
         LocalDateTime repPubDate;
         List<String> sectors;
+        java.util.Map<String, Double> tfidf; // similarity.method=tfidf 일 때 대표 제목의 TF-IDF 벡터
     }
 }

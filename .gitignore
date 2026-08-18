@@ -50,3 +50,9 @@ dashboard.json
 out_*.json
 KrxTest.java
 sectors.txt
+
+# 실제 API 키 포함 — 추적 금지 (템플릿은 keep_alive.example.ps1)
+keep_alive.ps1
+keep_alive_loop.log
+keep_alive.log
+cloudflared.log

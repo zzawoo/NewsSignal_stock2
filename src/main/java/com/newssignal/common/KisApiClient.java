@@ -307,33 +307,47 @@ public class KisApiClient {
     }
 
     private static JsonObject fetchDailyChart(String code, String period) {
-        java.time.LocalDate now = java.time.LocalDate.now();
-        int backDays = period.equals("M") ? 1500 : period.equals("W") ? 500 : 160;
+        // KIS는 호출당 최대 100봉 → 일봉은 날짜창을 뒤로 밀며 여러 번 호출해 과거 데이터를 더 확보(약 300봉, MA120 등 장기지표 지원).
+        java.time.LocalDate end = java.time.LocalDate.now();
         java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd");
-        String url = BASE_URL + "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
-                + "?fid_cond_mrkt_div_code=J&fid_input_iscd=" + code
-                + "&fid_input_date_1=" + now.minusDays(backDays).format(dtf)
-                + "&fid_input_date_2=" + now.format(dtf)
-                + "&fid_period_div_code=" + period + "&fid_org_adj_prc=0";
-        JsonObject resp = getJson(url, "FHKST03010100");
-        if (resp == null || !resp.has("output2") || !resp.get("output2").isJsonArray()) return null;
-        com.google.gson.JsonArray out = resp.getAsJsonArray("output2");
-        com.google.gson.JsonArray candles = new com.google.gson.JsonArray();
-        for (int i = out.size() - 1; i >= 0; i--) { // 최신→과거 이므로 뒤집어 시간순
-            JsonObject d = out.get(i).getAsJsonObject();
-            String date = optStr(d, "stck_bsop_date");
-            double clpr = optNum(d, "stck_clpr");
-            if (date == null || date.length() < 8 || clpr <= 0) continue;
-            JsonObject k = new JsonObject();
-            k.addProperty("t", date.substring(4, 6) + "/" + date.substring(6, 8));
-            k.addProperty("ts", date);
-            k.addProperty("o", optNum(d, "stck_oprc"));
-            k.addProperty("h", optNum(d, "stck_hgpr"));
-            k.addProperty("l", optNum(d, "stck_lwpr"));
-            k.addProperty("c", clpr);
-            k.addProperty("v", optNum(d, "acml_vol"));
-            candles.add(k);
+        int pages = period.equals("D") ? 3 : 1;                 // 주/월은 1콜로 장기간 커버됨
+        int windowDays = period.equals("M") ? 4000 : period.equals("W") ? 1500 : 150;
+        java.util.TreeMap<String, JsonObject> byDate = new java.util.TreeMap<String, JsonObject>(); // ts 오름차순
+        for (int p = 0; p < pages; p++) {
+            String url = BASE_URL + "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
+                    + "?fid_cond_mrkt_div_code=J&fid_input_iscd=" + code
+                    + "&fid_input_date_1=" + end.minusDays(windowDays).format(dtf)
+                    + "&fid_input_date_2=" + end.format(dtf)
+                    + "&fid_period_div_code=" + period + "&fid_org_adj_prc=0";
+            JsonObject resp = getJson(url, "FHKST03010100");
+            if (resp == null || !resp.has("output2") || !resp.get("output2").isJsonArray()) break;
+            com.google.gson.JsonArray out = resp.getAsJsonArray("output2");
+            if (out.size() == 0) break;
+            String oldest = null;
+            for (int i = 0; i < out.size(); i++) {
+                JsonObject d = out.get(i).getAsJsonObject();
+                String date = optStr(d, "stck_bsop_date");
+                double clpr = optNum(d, "stck_clpr");
+                if (date == null || date.length() < 8 || clpr <= 0) continue;
+                if (!byDate.containsKey(date)) {
+                    JsonObject k = new JsonObject();
+                    k.addProperty("t", date.substring(4, 6) + "/" + date.substring(6, 8));
+                    k.addProperty("ts", date);
+                    k.addProperty("o", optNum(d, "stck_oprc"));
+                    k.addProperty("h", optNum(d, "stck_hgpr"));
+                    k.addProperty("l", optNum(d, "stck_lwpr"));
+                    k.addProperty("c", clpr);
+                    k.addProperty("v", optNum(d, "acml_vol"));
+                    byDate.put(date, k);
+                }
+                if (oldest == null || date.compareTo(oldest) < 0) oldest = date;
+            }
+            if (oldest == null) break;
+            end = java.time.LocalDate.parse(oldest, dtf).minusDays(1); // 다음 페이지는 가장 오래된 날짜 직전부터
         }
+        if (byDate.isEmpty()) return null;
+        com.google.gson.JsonArray candles = new com.google.gson.JsonArray();
+        for (JsonObject k : byDate.values()) candles.add(k);
         JsonObject r = new JsonObject(); r.add("candles", candles); return r;
     }
 

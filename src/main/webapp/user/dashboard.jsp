@@ -5,14 +5,25 @@
 <div class="deck">
   <button id="collectBtn" class="btn primary">분석·요약 실행</button>
   <span class="hint">실 운영에서는 네이버 검색 API를 서버(Servlet)에서 호출합니다.</span>
+  <div class="deck-search" style="margin-left:auto; position:relative; flex:0 1 380px; min-width:200px;">
+    <input id="globalStockSearch" type="text" autocomplete="off"
+           placeholder="🔍 종목명 · 코드 검색 (예: 삼성전자, 005930)"
+           style="width:100%; box-sizing:border-box; padding:9px 14px; border-radius:8px; border:1px solid #3d4e6e; background:#1a2540; color:#e0e6f0; font-size:13.5px; outline:none;">
+    <div id="globalStockSuggest"
+         style="display:none; position:absolute; left:0; right:0; top:44px; background:#16203a; border:1px solid #2a3a55; border-radius:8px; max-height:340px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,.5); z-index:2000;"></div>
+  </div>
 </div>
 
 <main class="wrap">
-  <!-- 상단: 오늘의 증시 지표 -->
+  <!-- 상단: 오늘의 증시 지표 (+ 장중 시황: 투자자 수급·관전포인트 인라인 통합) -->
   <section class="card" style="margin-bottom: 18px;">
     <h2>오늘의 증시 지표 <span class="tag">국내외 지수 · 환율 · 유가 · 금 · 은</span></h2>
     <div id="macroSignals" class="macro-grid"></div>
+    <div id="marketBriefInline" style="display:none; padding:14px 20px 16px; border-top:1px solid var(--line);"></div>
   </section>
+
+  <!-- 오늘의 핫이슈 AI 요약 (hotissue.enabled=N 이면 자동 숨김) -->
+  <section class="card" id="hotIssueCard" style="margin-bottom: 18px; padding: 16px 20px 20px; display:none;"></section>
 
 <div class="top-layout">
   <!-- 왼쪽: 주요 이슈 (3열 x 2행) -->
@@ -58,6 +69,38 @@
     </div>
     <div id="stockListContainer" class="stocks-list-wrapper"></div>
   </section>
+
+  <!-- 시총 히트맵 + 오늘의 종목 (2단 나란히) -->
+  <div class="market-row">
+    <!-- 시총 히트맵 (트리맵) -->
+    <section class="card" id="heatmapCard" style="padding:16px 20px 20px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+        <h2 style="margin:0;">🗺️ 시총 히트맵 <span style="font-size:12px; color:#7d92b0; font-weight:400;">시총 비례 · 클릭 = 상세</span></h2>
+        <div id="heatmapTabs" style="display:flex; gap:6px;">
+          <button class="hm-tab" data-mk="kospi">코스피</button>
+          <button class="hm-tab" data-mk="kosdaq">코스닥</button>
+        </div>
+      </div>
+      <div id="heatmapBox" style="width:100%; height:404px; position:relative;"></div>
+    </section>
+
+    <!-- 오늘의 종목 랭킹 -->
+    <section class="card" id="moversCard" style="padding:16px 20px 20px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+        <h2 style="margin:0;">📊 오늘의 종목</h2>
+        <div id="moversTabs" style="display:flex; gap:6px;">
+          <button class="mv-tab" data-metric="value">거래대금</button>
+          <button class="mv-tab" data-metric="volume">거래량</button>
+          <button class="mv-tab" data-metric="gainers">급등</button>
+          <button class="mv-tab" data-metric="losers">급락</button>
+        </div>
+      </div>
+      <div id="moversBox" style="max-height:404px; overflow-y:auto;"></div>
+    </section>
+  </div>
+
+  <!-- 실적발표 피드 -->
+  <section class="card" id="earningsCard" style="margin-bottom:18px; padding:16px 20px 20px; display:none;"></section>
 
 </main>
 

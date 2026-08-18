@@ -17,6 +17,7 @@ public class NewsCollectContextListener implements ServletContextListener {
 
     private NewsCollectScheduler scheduler;       // 수집 스케줄 (선택)
     private NewsCollectScheduler analyzeScheduler; // 분석 스케줄 (수집과 분리)
+    private NewsCollectScheduler alertScheduler;   // 관심목록 알림 스캐너
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
@@ -57,6 +58,16 @@ public class NewsCollectContextListener implements ServletContextListener {
         } catch (Exception e) {
             sce.getServletContext().log("[NewsSignal] analyze init failed: " + e.getMessage());
         }
+
+        // 3) 알림 스캐너: 관심 키워드/종목 매칭 + 급변 감지 (인앱 알림). 사용자 없으면 즉시 스킵.
+        try {
+            int alertInterval = SettingsService.getInt("alert.interval.sec", 120);
+            alertScheduler = new NewsCollectScheduler(new AlertScannerJob(), "alert-scan");
+            alertScheduler.start(alertInterval);
+            sce.getServletContext().log("[NewsSignal] alert scanner started, interval=" + alertInterval + "s");
+        } catch (Exception e) {
+            sce.getServletContext().log("[NewsSignal] alert init failed: " + e.getMessage());
+        }
     }
 
     @Override
@@ -72,6 +83,12 @@ public class NewsCollectContextListener implements ServletContextListener {
             if (analyzeScheduler != null) analyzeScheduler.shutdown();
         } catch (Exception e) {
             sce.getServletContext().log("[NewsSignal] analyze scheduler shutdown error: " + e.getMessage());
+        }
+        // 단계 2-1: 알림 스케줄러 종료
+        try {
+            if (alertScheduler != null) alertScheduler.shutdown();
+        } catch (Exception e) {
+            sce.getServletContext().log("[NewsSignal] alert scheduler shutdown error: " + e.getMessage());
         }
         // 단계 3: DB 풀 종료 (스케줄러 실패와 무관하게 별도 try)
         try {

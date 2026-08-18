@@ -22,6 +22,22 @@ public class AnalyzeService {
 
     private static final Gson GSON = new Gson();
 
+    /** 호재/악재 채점 루브릭 + few-shot — 판정 일관성 표준화. 모든 provider 프롬프트에 주입. */
+    private static final String SCORING_GUIDE =
+            "[채점 기준] impact_score = 영향의 방향(부호)·강도(절댓값). "
+          + "+5 대형호재(대규모 수주·계약, 어닝 서프라이즈, 신약 허가, 대형 인수·투자유치, 직접 정책수혜), "
+          + "+3~+4 명확호재(실적 개선, 신규 수주, 다수 목표가 상향, 신제품 모멘텀), "
+          + "+1~+2 약호재(우호적 전망, 단일 목표가 상향, 점진적 기대), "
+          + "0 중립(단순 동향·현황, 영향 불명확, 호·악재 상쇄), "
+          + "-1~-2 약악재(부정적 전망, 목표가 하향, 경쟁심화 우려), "
+          + "-3~-4 명확악재(실적 부진, 규제·제재·소송, 공급과잉), "
+          + "-5 대형악재(어닝 쇼크, 리콜·사고, 상장폐지·횡령·분식, 대형계약 해지). "
+          + "good_bad_type: score>0→GOOD, score<0→BAD, 영향 미미→NEUTRAL, 호·악재 뚜렷이 공존→MIXED. "
+          + "confidence_score: 구체·확정 정보면 80+, 추측·관측성이면 40~60.\n"
+          + "[판정 예시] \"삼성전자 HBM3E 양산 본격화·엔비디아 공급 확대\"→GOOD,+4 | "
+          + "\"OO제약 임상3상 실패로 주가 급락\"→BAD,-5 | "
+          + "\"코스피, 외국인 매도에 약보합 마감\"→NEUTRAL,0.\n";
+
     /**
      * 아직 분석되지 않은 유사도 그룹 대표 기사를 AI로 분석합니다.
      */
@@ -46,27 +62,33 @@ public class AnalyzeService {
         boolean hasGemini = geminiKey != null && !geminiKey.trim().isEmpty() && !"dummy_key".equals(geminiKey);
         boolean hasOpenAI = openaiKey != null && !openaiKey.trim().isEmpty() && !"dummy_key".equals(openaiKey);
 
-        // 분석 제공자 선택. ollama=로컬 LLM(무료, CPU 느림), groq=클라우드(무료·빠름, OpenAI 호환). 기본 gemini.
-        String provider = SettingsService.get("analyze.provider", "gemini").trim().toLowerCase();
-        boolean useOllama = "ollama".equals(provider);
-        boolean useGroq = "groq".equals(provider);
+        // 분석 제공자: primary(기본 gemini) + fallback(기본 groq). Gemini 한도 소진 시 자동으로 fallback 전환,
+        // 쿨다운(analyze.gemini.cooldown.min, 기본 60분) 경과 후 Gemini를 다시 시도(자동 복귀).
+        String primary = SettingsService.get("analyze.provider", "gemini").trim().toLowerCase();
+        String fallback = SettingsService.get("analyze.fallback.provider", "groq").trim().toLowerCase();
         String ollamaModel = SettingsService.get("ollama.model", "exaone3.5:7.8b");
         String groqModel = SettingsService.get("groq.model", "llama-3.3-70b-versatile");
         String groqKey = System.getenv("GROQ_API_KEY");
         boolean hasGroq = groqKey != null && !groqKey.trim().isEmpty() && !"dummy_key".equals(groqKey);
 
-        if (useGroq && !hasGroq) {
-            System.err.println("[AnalyzeService] analyze.provider=groq 인데 GROQ_API_KEY가 없습니다. "
-                    + "console.groq.com/keys 에서 무료 키 발급 후 환경변수 GROQ_API_KEY에 설정하세요. (이번 실행 건너뜀)");
+        String provider = primary;
+        if ("gemini".equals(primary) && geminiCooldownUntil() > System.currentTimeMillis()
+                && hasGroq && !"gemini".equals(fallback)) {
+            provider = fallback; // Gemini 쿨다운 중 → 폴백으로 분석 진행
+            System.out.println("[AnalyzeService] Gemini 쿨다운 중 → " + provider + " 사용 (남은 "
+                    + ((geminiCooldownUntil() - System.currentTimeMillis()) / 60000) + "분)");
+        }
+        if ("groq".equals(provider) && !hasGroq) {
+            System.err.println("[AnalyzeService] provider=groq 인데 GROQ_API_KEY가 없습니다. (이번 실행 건너뜀)");
             return;
         }
 
         // 여러 그룹을 한 번의 LLM 호출로 묶어 호출 수를 줄인다.
         int batchSize;
-        if (useOllama)      batchSize = Math.max(1, SettingsService.getInt("ollama.batch.size", 2));
-        else if (useGroq)   batchSize = Math.max(1, SettingsService.getInt("groq.batch.size", 3));
-        else if (hasGemini) batchSize = Math.max(1, SettingsService.getInt("analyze.batch.size", 8));
-        else                batchSize = 1;
+        if ("ollama".equals(provider))    batchSize = Math.max(1, SettingsService.getInt("ollama.batch.size", 2));
+        else if ("groq".equals(provider)) batchSize = Math.max(1, SettingsService.getInt("groq.batch.size", 3));
+        else if (hasGemini)               batchSize = Math.max(1, SettingsService.getInt("analyze.batch.size", 8));
+        else                              batchSize = 1;
         // 같은 배치에서 연속 rate limit(429)을 몇 번까지 재시도할지. 초과 시 이번 실행 종료
         // (60초 뒤 스케줄러가 다시 시도). 무한 재시도로 livelock에 빠지지 않도록 상한을 둔다.
         int maxRetryPerBatch = Math.max(1, SettingsService.getInt("analyze.batch.max.retry", 2));
@@ -80,7 +102,7 @@ public class AnalyzeService {
             }
             List<UnanalyzedGroup> batch = targets.subList(i, Math.min(i + batchSize, targets.size()));
             try {
-                if (useOllama) {
+                if ("ollama".equals(provider)) {
                     // 로컬 Ollama: 호출 한도 없음 → sleep 없이 바로 다음 배치
                     Map<Long, AnalysisResult> results = callOllamaBatch(batch, ollamaModel);
                     for (UnanalyzedGroup g : batch) {
@@ -91,7 +113,7 @@ public class AnalyzeService {
                         }
                     }
                     retryStreak = 0;
-                } else if (useGroq) {
+                } else if ("groq".equals(provider) && hasGroq) {
                     // Groq 클라우드(OpenAI 호환, 빠름). 무료 RPM/TPM 한도 → 배치 사이 짧은 간격.
                     Map<Long, AnalysisResult> results = callGroqBatch(batch, groqKey, groqModel);
                     for (UnanalyzedGroup g : batch) {
@@ -103,7 +125,7 @@ public class AnalyzeService {
                     }
                     retryStreak = 0;
                     Thread.sleep(2000); // 무료 RPM(~30/분) 준수
-                } else if (hasGemini) {
+                } else if ("gemini".equals(provider) && hasGemini) {
                     Map<Long, AnalysisResult> results = callGeminiBatch(batch, geminiKey);
                     for (UnanalyzedGroup g : batch) {
                         AnalysisResult r = results.get(g.groupId);
@@ -113,8 +135,8 @@ public class AnalyzeService {
                         }
                     }
                     retryStreak = 0; // 성공 → 연속 카운트 리셋
-                    // 무료 티어 RPM(분당 ~15회) 준수: 배치(=1 호출) 사이 4초 간격
-                    Thread.sleep(4000);
+                    // 배치 사이 간격(무료 RPM 준수용). 유료는 gemini.sleep.ms를 낮게(예: 300) 설정해 빠르게.
+                    Thread.sleep(SettingsService.getInt("gemini.sleep.ms", 4000));
                 } else {
                     // 폴백: OpenAI 또는 목업을 그룹 단위로 처리
                     for (UnanalyzedGroup g : batch) {
@@ -133,11 +155,21 @@ public class AnalyzeService {
                 String msg = e.getMessage();
                 boolean rateLimited = msg != null && (msg.contains("429") || msg.contains("RESOURCE_EXHAUSTED")
                         || msg.contains("Rate limit") || msg.contains("rate_limit"));
-                // Gemini는 일일 한도(20/일)가 진짜 병목 → PerDay면 즉시 중단.
-                // Groq는 일일 한도가 넉넉하고 분당(RPM)이 병목 → 429라도 잠깐 대기 후 재시도.
-                if (rateLimited && !useGroq && (msg.contains("PerDay") || msg.contains("per day"))) {
-                    System.err.println("[AnalyzeService] LLM daily quota (RPD) exhausted. Stopping this run.");
-                    break;
+                if (rateLimited && "gemini".equals(provider)) {
+                    // Gemini 한도(일일 RPD/분당 RPM) 소진 → 쿨다운 설정 후 폴백(Groq)으로 자동 전환, 같은 배치 재시도.
+                    //   (무료 등급은 20요청/일이라 분당 대기로는 안 풀림 → 폴백이 백로그를 갈아냄. 쿨다운 경과 후 Gemini 자동 복귀)
+                    long cdMin = SettingsService.getInt("analyze.gemini.cooldown.min", 60);
+                    SettingsService.set("gemini.cooldown.until", String.valueOf(System.currentTimeMillis() + cdMin * 60000L));
+                    if (hasGroq && !"gemini".equals(fallback)) {
+                        System.err.println("[AnalyzeService] Gemini 한도 소진 → " + fallback + "로 자동 전환 ("
+                                + cdMin + "분 후 Gemini 재시도). " + (msg.length() > 140 ? msg.substring(0, 140) : msg));
+                        provider = fallback;
+                        retryStreak = 0;
+                        i -= batchSize;
+                    } else {
+                        System.err.println("[AnalyzeService] Gemini 한도 소진 + 폴백 불가 → 이번 실행 종료.");
+                        break;
+                    }
                 } else if (rateLimited) {
                     retryStreak++;
                     if (retryStreak > maxRetryPerBatch) {
@@ -159,6 +191,12 @@ public class AnalyzeService {
                 }
             }
         }
+    }
+
+    /** Gemini 쿨다운 만료 시각(epoch ms). 한도 소진 시 설정되며 이 시각 이후 Gemini를 다시 시도. */
+    private static long geminiCooldownUntil() {
+        try { return Long.parseLong(SettingsService.get("gemini.cooldown.until", "0")); }
+        catch (Exception e) { return 0L; }
     }
 
     private int getTodayAnalysisCount() {
@@ -278,18 +316,23 @@ public class AnalyzeService {
                     }
                 }
 
-                // 4. 종목 매핑 저장 (LLM이 지목한 종목)
+                // 4. 종목 매핑 저장 — news_stock_map 오염 방지:
+                //    LLM related_stocks는 거시·지수 뉴스에 대형주를 임의로 갖다붙이는 오지정이 많아(실측 약 91%),
+                //    "그룹 본문에 실제 등장하는 종목"으로 제한한다(StockResolver = stock_master 종목명 직접 매칭).
+                java.util.Set<String> textCodes = new java.util.LinkedHashSet<String>(StockResolver.codesFor(groupText));
+
+                // 4-1. LLM이 지목한 종목 중 본문에 실제 등장하는 것만 매핑
                 if (result.related_stocks != null) {
                     for (StockInfo stock : result.related_stocks) {
                         String code = getOrCreateStock(conn, stock);
-                        if (code != null) {
+                        if (code != null && textCodes.contains(code)) {
                             insertNewsStockMap(conn, groupId, code, result.good_bad_type);
                         }
                     }
                 }
 
-                // 4-1. 기사 텍스트에서 stock_master 종목명 직접 매칭 (LLM 코드 누락/목업 보완)
-                for (String code : StockResolver.codesFor(groupText)) {
+                // 4-2. 본문 직접 매칭 종목 (LLM 누락 보완)
+                for (String code : textCodes) {
                     insertNewsStockMap(conn, groupId, code, result.good_bad_type);
                 }
 
@@ -307,8 +350,9 @@ public class AnalyzeService {
                     }
                 }
 
-                // 6. DB의 sector_map과 UI 태그(related_sectors) 동기화
-                syncRelatedSectors(conn, groupId);
+                // 6. UI 태그(related_sectors) = LLM이 대표기사에서 뽑은 섹터+거시만(검증·최대 6개)
+                //    (news_sector_map GROUP_CONCAT 합집합은 수집 시 기사별 누적으로 30개까지 불어나 부정확)
+                writeRelatedSectorsFromLLM(conn, groupId, result);
 
                 conn.commit();
             } catch (Exception e) {
@@ -328,21 +372,10 @@ public class AnalyzeService {
                 if (rs.next()) return rs.getString(1);
             }
         }
-        // stock_master에 없는 종목은 합성코드(S#####)를 만들지 않는다.
-        // LLM이 유효한 6자리 코드를 준 경우에만 신규 등재, 아니면 매핑 생략.
-        String code = stock.code != null && stock.code.trim().length() == 6 ? stock.code.trim() : null;
-        if (code == null) {
-            return null;
-        }
-        String insertSql = "INSERT INTO stock_master (stock_code, stock_name, market) VALUES (?, ?, 'KRX')";
-        try (PreparedStatement ps = conn.prepareStatement(insertSql)) {
-            ps.setString(1, code);
-            ps.setString(2, stock.name.trim());
-            ps.executeUpdate();
-            return code;
-        } catch (SQLException e) {
-            return code;
-        }
+        // stock_master(KIND 적재 권위 테이블)에 없으면 매핑 생략한다.
+        // LLM이 주는 6자리 코드는 환각(예: 현대차→789012, 금→567890)이 잦아 절대 신규 INSERT하지 않는다.
+        // → 가짜 종목이 검색/상세를 오염시키던 문제 차단(2026-06-26).
+        return null;
     }
 
     private void insertNewsStockMap(Connection conn, Long groupId, String stockCode, String type) throws SQLException {
@@ -359,6 +392,36 @@ public class AnalyzeService {
             ps.setLong(1, groupId);
             ps.setString(2, stockCode);
             ps.setString(3, type);
+            ps.executeUpdate();
+        }
+    }
+
+    private static final java.util.Set<String> VALID_MACRO = new java.util.HashSet<String>(java.util.Arrays.asList(
+            "코스피", "코스닥", "나스닥", "다우", "S&P500", "환율", "유가", "금", "은", "달러", "금리"));
+
+    /** related_sectors(이슈 칩)를 LLM이 대표기사에서 뽑은 섹터+거시로만 설정(화이트리스트 검증·최대 6개). */
+    private void writeRelatedSectorsFromLLM(Connection conn, Long groupId, AnalysisResult result) throws SQLException {
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<String>();
+        if (result.sector_keywords != null) {
+            for (String s : result.sector_keywords.split(",")) {
+                String n = s.trim();
+                if (!n.isEmpty() && com.newssignal.collector.ArticleService.isAllowedSector(n)) set.add(n);
+            }
+        }
+        if (result.related_macro != null) {
+            for (String m : result.related_macro) {
+                if (m == null) continue;
+                for (String part : m.split(",")) {
+                    String n = part.trim();
+                    if (VALID_MACRO.contains(n)) set.add(n);
+                }
+            }
+        }
+        java.util.List<String> list = new java.util.ArrayList<String>(set);
+        if (list.size() > 6) list = new java.util.ArrayList<String>(list.subList(0, 6));
+        try (PreparedStatement ps = conn.prepareStatement("UPDATE news_similarity_group SET related_sectors = ? WHERE id = ?")) {
+            ps.setString(1, String.join(",", list));
+            ps.setLong(2, groupId);
             ps.executeUpdate();
         }
     }
@@ -482,11 +545,12 @@ public class AnalyzeService {
                 + "  \"impact_reason\": \"증시/섹터에 미치는 영향 이유 (한국어, 약 300자)\",\n"
                 + "  \"risk_factor\": \"주의할 리스크 요인 (한국어, 약 200자)\",\n"
                 + "  \"confidence_score\": [integer between 0 and 100],\n"
-                + "  \"sector_keywords\": \"comma-separated. You MUST ONLY use these sectors: 반도체, 바이오, 2차전지, 자동차, 조선, 방산, 금융, 원전, 사료, 철강, 건설, 화학, 엔터테인먼트, IT, 게임, 통신, 기계, 항공, 화장품, 음식료. DO NOT use stock names or other words.\",\n"
+                + "  \"sector_keywords\": \"comma-separated. You MUST ONLY use these sectors: 반도체, 바이오, 2차전지, 자동차, 조선, 방산, 금융, 원전, 사료, 철강, 건설, 화학, 엔터테인먼트, IT, 게임, 통신, 기계, 항공, 화장품, 음식료, 로봇, 비만치료제, AI소프트웨어, 수소. DO NOT use stock names or other words.\",\n"
                 + "  \"related_stocks\": [{\"name\": \"종목명 (예: 삼성전자)\", \"code\": \"6-digit code if known\"}],\n"
                 + "  \"related_macro\": [\"코스피, 코스닥, 환율, 유가, 금, 은 등 언급된 지수/환율\"]\n"
                 + "}\n"
                 + "The output array length MUST equal the input array length.\n"
+                + SCORING_GUIDE
                 + "Input groups (JSON array):\n" + inputs.toString();
 
         String jsonText = postGeminiText(prompt, apiKey);
@@ -520,10 +584,11 @@ public class AnalyzeService {
                 + "  \"impact_reason\": \"증시/섹터 영향 이유(한국어, 약 200자)\",\n"
                 + "  \"risk_factor\": \"주의할 리스크(한국어, 약 150자)\",\n"
                 + "  \"confidence_score\": 0~100 사이 정수,\n"
-                + "  \"sector_keywords\": \"콤마 구분. 반드시 이 섹터만 사용: 반도체,바이오,2차전지,자동차,조선,방산,금융,원전,사료,철강,건설,화학,엔터테인먼트,IT,게임,통신,기계,항공,화장품,음식료. 종목명 사용 금지\",\n"
+                + "  \"sector_keywords\": \"콤마 구분. 반드시 이 섹터만 사용: 반도체,바이오,2차전지,자동차,조선,방산,금융,원전,사료,철강,건설,화학,엔터테인먼트,IT,게임,통신,기계,항공,화장품,음식료,로봇,비만치료제,AI소프트웨어,수소. 종목명 사용 금지\",\n"
                 + "  \"related_stocks\": [{\"name\":\"종목명\",\"code\":\"6자리코드(알면)\"}],\n"
                 + "  \"related_macro\": [\"코스피,코스닥,환율,유가,금,은 등 언급된 지수/환율\"]\n"
                 + "}\n"
+                + SCORING_GUIDE
                 + "입력 그룹 배열:\n" + inputs.toString();
 
         JsonObject reqBody = new JsonObject();
@@ -593,9 +658,10 @@ public class AnalyzeService {
                 + "{\"id\":int, \"summary_short\":\"2~3줄 한국어 요약\", \"summary_detail\":\"상세 한국어 요약\", "
                 + "\"good_bad_type\":\"GOOD|BAD|NEUTRAL|MIXED\", \"impact_score\":int(-5..5), "
                 + "\"impact_reason\":\"한국어\", \"risk_factor\":\"한국어\", \"confidence_score\":int(0..100), "
-                + "\"sector_keywords\":\"comma-separated; ONLY use: 반도체,바이오,2차전지,자동차,조선,방산,금융,원전,사료,철강,건설,화학,엔터테인먼트,IT,게임,통신,기계,항공,화장품,음식료\", "
+                + "\"sector_keywords\":\"comma-separated; ONLY use: 반도체,바이오,2차전지,자동차,조선,방산,금융,원전,사료,철강,건설,화학,엔터테인먼트,IT,게임,통신,기계,항공,화장품,음식료,로봇,비만치료제,AI소프트웨어,수소\", "
                 + "\"related_stocks\":[{\"name\":\"종목명\",\"code\":\"6-digit\"}], "
                 + "\"related_macro\":[\"코스피,코스닥,환율,유가,금,은 등\"]}\n"
+                + SCORING_GUIDE
                 + "Input groups (JSON array):\n" + inputs.toString();
 
         String urlStr = SettingsService.get("groq.host", "https://api.groq.com/openai/v1") + "/chat/completions";
@@ -734,7 +800,8 @@ public class AnalyzeService {
 
     /** Gemini generateContent 호출 후 후보 텍스트를 반환 (단일/배치 공용). */
     private String postGeminiText(String prompt, String apiKey) throws Exception {
-        String urlStr = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=" + apiKey;
+        String model = SettingsService.get("gemini.model", "gemini-2.5-flash");
+        String urlStr = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
@@ -808,7 +875,7 @@ public class AnalyzeService {
                 + "  \"impact_reason\": \"Detailed explanation of why this news impacts the stock market/sector in Korean (up to 1000 chars)\",\n"
                 + "  \"risk_factor\": \"Potential risk factors to watch out for in Korean (up to 1000 chars)\",\n"
                 + "  \"confidence_score\": [integer between 0 and 100],\n"
-                + "  \"sector_keywords\": \"comma-separated sector keywords. You MUST ONLY use the following allowed sectors: 반도체, 바이오, 2차전지, 자동차, 조선, 방산, 금융, 원전, 사료, 철강, 건설, 화학, 엔터테인먼트, IT, 게임, 통신, 기계, 항공, 화장품, 음식료. DO NOT USE individual stock names or any other words as sectors.\",\n"
+                + "  \"sector_keywords\": \"comma-separated sector keywords. You MUST ONLY use the following allowed sectors: 반도체, 바이오, 2차전지, 자동차, 조선, 방산, 금융, 원전, 사료, 철강, 건설, 화학, 엔터테인먼트, IT, 게임, 통신, 기계, 항공, 화장품, 음식료, 로봇, 비만치료제, AI소프트웨어, 수소. DO NOT USE individual stock names or any other words as sectors.\",\n"
                 + "  \"related_stocks\": [{\"name\": \"Stock Name (e.g. 삼성전자)\", \"code\": \"6-digit stock code if known (e.g. 005930)\"}],\n"
                 + "  \"related_macro\": [\"names of indices/exchange rates mentioned, e.g. 코스피, 코스닥, 환율, 유가, 금, 은\"]\n"
                 + "}";

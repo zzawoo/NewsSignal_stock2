@@ -1,6 +1,6 @@
 # NewsSignal AI — 프로젝트 메모리
 
-네이버 뉴스 기반 주식 호재·악재 분석 대시보드. 이 파일은 Claude Code가 매 세션
+네이버 뉴스 기반 주식 호재·악재 분석 대시보드. 이 파일은 Codex가 매 세션
 시작 시 읽는다. 상세 설계는 README.md, 산출 배경은 docs/개발계획서_v2.0.docx 참고.
 
 ## 현재 상태 (2026-06-17)
@@ -13,10 +13,6 @@
   Jaccard 유사 그룹화 → 그룹 대표 1건만 LLM 분석 → 그룹 전파.
 - **LLM 분석**: 현재 **Groq**(`llama-3.1-8b-instant`), `analyze.provider`로 gemini/ollama 전환.
   JSON 강제 출력, 호재/악재·영향도(−5~+5)·확신도·섹터(20종 화이트리스트).
-  **채점 루브릭+few-shot 표준화**(`AnalyzeService.SCORING_GUIDE`, 3 provider 프롬프트 공통 주입)로 판정 일관성↑.
-- **유사도 그룹화**: `similarity.method` = jaccard | **tfidf**(현재). TF-IDF 코사인(features=단어+바이그램에 IDF 가중,
-  과병합↓). 임계값 `similarity.tfidf.sector`=0.16 / `.title`=0.28 (실데이터 보정값). 임베딩(bge-m3)은 테스트 결과
-  주제·종목만 잡고 사건/감성을 못 구분(과병합)해 미채택 — 하이브리드 옵션으로 보류.
 - **대시보드**: 주요 이슈(기간 필터 전체/당일/전일 — 전체=당일+전일 날짜 균형, 표시 확대),
   연관 섹터 시그널, 오늘의 증시 지표.
 - **증시 지표 카드**: 네이버 실시간(15초 폴링) + **미니 그래프(스파크라인)**(일별 종가, 5분 캐시).
@@ -107,23 +103,16 @@ db/  schema.sql, map_sector_stocks.sql, collect_keywords_scope.sql, (정제·감
 - LLM `provider`는 `collect_settings.analyze.provider`로 선택(groq/gemini/ollama).
   Groq는 Cloudflare 뒤 → `User-Agent: Mozilla/5.0` 필수.
 - 현재 운영 설정: **수집 자동 10분**(`collect.auto.enabled=Y`, `collect.interval.sec=600`),
-  **분석 자동 ON**(`analyze.auto.enabled=Y`, 60초 주기 — 2026-06-18 백로그 소화 위해 수동→자동 전환,
-  무료 Groq 한도면 자동 대기·재개. 토큰 아끼려면 N으로 되돌리고 재기동). 대시보드 집계는 최근 3일 + `analyzed_yn='Y'`.
-- 수집 노이즈 필터: `ArticleService.isNoise`(제목 패턴 차단, `collect.block.patterns` 설정). 시황recap·브랜드평판·주가봇·주식무관 제외.
+  **분석 수동 버튼**(`analyze.auto.enabled=N`). 대시보드 집계는 최근 3일 + `analyzed_yn='Y'`.
 - ★ **sibling `/newssignal` 재배포가 공유 DB의 collect_settings를 리셋**함 → 비활성 유지.
 - Jsoup 보조 수집기는 약관 리스크로 **기본 비활성**.
 
 ## 향후 작업 (TODO)
 
 - [ ] 관리자 화면: 수집 설정·키워드·섹터/종목 매핑 CRUD
-- [x] 유사도 의미화: 제목 Jaccard → **TF-IDF 코사인** (2026-06-18 완료, similarity.method=tfidf). 임베딩 하이브리드는 선택 잔여
-- [x] 호재/악재 채점 루브릭(few-shot) 표준화 (2026-06-18 완료, SCORING_GUIDE)
-- [x] 로그인 + 관심 키워드/종목, 호재악재·급변 **인앱 알림** (2026-06-19 완료). 이메일/웹푸시는 잔여
-- [ ] 알림 이메일(SMTP)/웹푸시(VAPID) 채널 추가
-- [x] 누락 지표(목표가·배당) 외부 연동 (2026-06-26 완료, StockInfoServlet.addConsensus — 네이버 integration: 목표주가·투자의견·배당수익률·DPS·추정PER, 30분 캐시)
-- [x] 섹터-종목 매핑 큐레이션 보강(KRX 업종분류 ≠ 투자테마) (2026-06-26 완료)
-      ① 투자테마 4종 정제(`db/curate_sectors_2026-06-26.sql`): 원전 오매핑 4건 제거+보강, 방산 7→14, 2차전지 36→44, 엔터 51→43(방송/뉴스사 분리).
-      ② 신규 테마 4종 신설(`db/add_themes_2026-06-26.sql`): 로봇(14)·비만치료제(9)·AI소프트웨어(10)·수소(8). 신설 시 화이트리스트 5곳 동시갱신(sector_master/sector_stock_map/ArticleService.ALLOWED_SECTORS/AnalyzeService 프롬프트 4곳/재빌드).
-      잔여: 원본 광범위 업종(바이오 311·IT 246·기계 245·화학 223) 자체 축소는 보류(뉴스 섹터신호 용도로 허용), 추가 테마 발굴은 선택.
+- [ ] 유사도 의미화: 제목 Jaccard → 임베딩/TF-IDF (의미 기반 그룹화)
+- [ ] 호재/악재 채점 루브릭(few-shot) 표준화로 판정 일관성↑
+- [ ] 로그인 + 관심 키워드/종목, 급변·호재악재 실시간 알림(메일/푸시)
+- [ ] 섹터-종목 매핑 큐레이션 보강(KRX 업종분류 ≠ 투자테마), 누락 지표(목표가·배당) 외부 연동
 - [ ] 운영: API 키 외부화·CI/CD, 스케줄러/에러 모니터링
 - [ ] 종목별 호재/악재 타임라인, 신호 기반 백테스트

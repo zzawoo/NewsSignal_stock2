@@ -1,8 +1,11 @@
 package com.newssignal.analyzer;
 
 import java.security.MessageDigest;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -66,6 +69,64 @@ public class SimilarityService {
         double sim = jaccard(titleA, titleB);
         boolean shared = sectorsA != null && sectorsB != null
                 && sectorsA.stream().anyMatch(sectorsB::contains);
+        return (sim >= simWithSector && shared) || sim >= simTitleOnly;
+    }
+
+    /* ── TF-IDF 코사인 (의미 기반 그룹화 고도화) ──
+       features()(단어+바이그램) 위에 IDF 가중 → 변별력 있는 용어가 유사도를 지배.
+       Jaccard의 단순 공통비율보다 흔한 용어 영향을 낮춰 '같은 종목 다른 사건' 과병합을 줄임. */
+    private static final double SMOOTH = 1.0;
+
+    /** 코퍼스(제목 집합)로 IDF 산출. */
+    public Map<String, Double> computeIdf(Collection<String> corpus) {
+        Map<String, Integer> df = new HashMap<>();
+        int n = 0;
+        for (String t : corpus) {
+            n++;
+            for (String f : features(t)) df.merge(f, 1, Integer::sum);
+        }
+        double N = Math.max(1, n);
+        Map<String, Double> idf = new HashMap<>();
+        for (Map.Entry<String, Integer> e : df.entrySet())
+            idf.put(e.getKey(), Math.log((N + SMOOTH) / (e.getValue() + SMOOTH)) + 1.0);
+        return idf;
+    }
+
+    /** 제목의 TF-IDF 희소 벡터(이진 tf — 제목은 짧아 용어 중복 드묾). idf=null이면 모든 가중치 1. */
+    public Map<String, Double> tfidfVector(String title, Map<String, Double> idf) {
+        Map<String, Double> v = new HashMap<>();
+        double dflt = Math.log(2.0) + 1.0; // 코퍼스에 없던 용어 = 변별력 높게
+        for (String f : features(title)) {
+            double w = (idf == null) ? 1.0 : idf.getOrDefault(f, dflt);
+            if (w > 0) v.put(f, w);
+        }
+        return v;
+    }
+
+    public double cosine(Map<String, Double> a, Map<String, Double> b) {
+        if (a == null || b == null || a.isEmpty() || b.isEmpty()) return 0;
+        Map<String, Double> small = (a.size() <= b.size()) ? a : b;
+        Map<String, Double> large = (small == a) ? b : a;
+        double dot = 0;
+        for (Map.Entry<String, Double> e : small.entrySet()) {
+            Double w = large.get(e.getKey());
+            if (w != null) dot += e.getValue() * w;
+        }
+        double na = norm(a), nb = norm(b);
+        return (na == 0 || nb == 0) ? 0 : dot / (na * nb);
+    }
+
+    private double norm(Map<String, Double> v) {
+        double s = 0; for (double w : v.values()) s += w * w; return Math.sqrt(s);
+    }
+
+    /** TF-IDF 벡터 기반 같은 이슈 판정. isSameIssue와 동일한 결합 규칙(섹터 공유 시 느슨, 아니면 엄격). */
+    public boolean isSameIssueVec(Map<String, Double> aVec, List<String> aSectors,
+                                  Map<String, Double> bVec, List<String> bSectors,
+                                  double simWithSector, double simTitleOnly) {
+        double sim = cosine(aVec, bVec);
+        boolean shared = aSectors != null && bSectors != null
+                && aSectors.stream().anyMatch(bSectors::contains);
         return (sim >= simWithSector && shared) || sim >= simTitleOnly;
     }
 

@@ -41,8 +41,8 @@ if ((Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyCon
 }
 Log "Tomcat DOWN -> starting (detached)"
 $env:JAVA_HOME = "C:\project\NewsSignal_stock2\env\jdk\jdk8u412-b08"
-$env:CATALINA_HOME = "C:\project\NewsSignal_stock\env\tomcat\apache-tomcat-8.5.99"
-$env:CATALINA_BASE = "C:\project\NewsSignal_stock\env\tomcat\apache-tomcat-8.5.99"
+$env:CATALINA_HOME = "C:\project\NewsSignal_stock2\env\tomcat\apache-tomcat-8.5.99"
+$env:CATALINA_BASE = "C:\project\NewsSignal_stock2\env\tomcat\apache-tomcat-8.5.99"
 $env:DB_URL = "jdbc:mariadb://localhost:3306/newssignal?useUnicode=true&characterEncoding=utf8"
 $env:DB_USER = "root"
 $env:DB_PASS = ""
